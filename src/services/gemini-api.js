@@ -13,14 +13,15 @@ export async function generateParagraphSummaries(blocks, title, key, onStepChang
   for (let s = 0; s < paras.length; s += BATCH) {
     const batch = paras.slice(s, s + BATCH);
     const ctx = s > 0 ? `Context — recent summaries: ${Object.values(map).slice(-3).join(' | ')}` : '';
-    const prompt = `You help students with ADHD read "${title}" using a focus-reading interface where only one paragraph is shown at a time.
+    const prompt = `You are an expert cognitive learning assistant specialized in helping students (including those with ADHD) study complex texts.
+You are generating a focus-reading interface for the document "${title}".
 ${ctx}
-For each paragraph write a summary of 8-14 words that:
-- Flows naturally as a story fragment from the paragraph before it
-- Uses plain direct language, not academic
-- Captures the single most important idea
-- Never starts with "This paragraph" / "The author" / "Here we see"
-- Feels like a breadcrumb — enough context, not a spoiler
+For each paragraph, write a concise summary of 8-14 words. The summaries MUST:
+- Create a continuous, narrative-like flow (Hebb's breadcrumbs) where each summary naturally connects to the previous one, forming a cohesive study guide.
+- Use plain, active, and direct language. Avoid dense academic jargon or passive constructions.
+- Focus on the core conceptual takeaway or application rather than dry descriptions.
+- NEVER start with meta-phrases like "This paragraph talks about...", "Here, the author...", "The section details..."
+- Act as an engaging mental trigger that gives enough context to remember the idea, but encourages clicking to read details.
 
 Return ONLY valid JSON: [{"id":0,"summary":"..."}]
 
@@ -101,16 +102,17 @@ ${batch.map(p => `[${p.id}] ${p.text}`).join('\n\n')}`;
 }
 
 export async function generateQuizQuestion(paragraphText, key) {
-  const prompt = `You are a helpful study tutor. Based on this paragraph, write a single multiple-choice question to test a student's comprehension.
-    
+  const prompt = `You are a world-class study tutor specialized in active recall and deep conceptual learning.
+Based on this paragraph, write a single multiple-choice question designed to test the student's conceptual comprehension, not just rote memorization.
+
 Paragraph:
 "${paragraphText}"
 
 Create:
-- 1 clear question
-- 3 options (1 correct, 2 plausible distractors)
-- The correct answer index (0, 1, or 2)
-- A short, encouraging explanation of why that answer is correct.`;
+- 1 clear question. Focus on the core concept, its implications, or a practical scenario applying it.
+- 3 options (1 correct, 2 highly plausible distractors based on common misconceptions).
+- The correct answer index (0, 1, or 2).
+- A short, encouraging, and clear explanation of why the correct answer is right and why it matters, reinforcing the learning loop.`;
 
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
     method: 'POST',

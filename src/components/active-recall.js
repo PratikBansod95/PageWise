@@ -36,24 +36,21 @@ export function submitAnswer(idx, oidx, container) {
   buttons.forEach((btn, bidx) => {
     btn.disabled = true;
     if (bidx === correctIdx) {
-      btn.style.borderColor = '#2A7A4A';
-      btn.style.background = 'rgba(42, 122, 74, 0.06)';
-      btn.style.color = '#2A7A4A';
-      btn.style.fontWeight = '600';
+      btn.classList.add('correct');
     } else if (bidx === oidx) {
-      btn.style.borderColor = '#8B2020';
-      btn.style.background = 'rgba(139, 32, 32, 0.06)';
-      btn.style.color = '#8B2020';
+      btn.classList.add('incorrect');
     } else {
-      btn.style.opacity = '0.5';
+      btn.classList.add('muted');
     }
   });
 
   const feedback = container.querySelector('.quiz-feedback');
   feedback.style.display = 'block';
   if (oidx === correctIdx) {
-    feedback.innerHTML = `<strong style="color: #2A7A4A;">Correct! 🎉</strong> ${escHtml(explanation)}`;
+    feedback.className = 'quiz-feedback correct';
+    feedback.innerHTML = `<strong>Correct! 🎉</strong> ${escHtml(explanation)}`;
   } else {
-    feedback.innerHTML = `<strong style="color: #8B2020;">Incorrect ❌</strong> ${escHtml(explanation)}`;
+    feedback.className = 'quiz-feedback incorrect';
+    feedback.innerHTML = `<strong>Incorrect ❌</strong> ${escHtml(explanation)}`;
   }
 }

@@ -283,3 +283,10 @@
   padding:3px 10px;border-radius:20px;
   border:1px solid var(--rule);
 }
+
+/* ADHD Focus-Dimming: when any block is active, fade and blur all OTHER blocks */
+.r-main:has(.para-block.active) .para-block:not(.active) {
+  opacity: 0.35;
+  filter: grayscale(15%) blur(0.2px);
+  transform: scale(0.995);
+}
