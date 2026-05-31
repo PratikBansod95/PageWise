@@ -64,14 +64,26 @@
 
 /* Layout: sidebar + book area */
 .r-layout{
-  display:grid;grid-template-columns:220px 1fr;
-  max-width:1140px;margin:0 auto;
+  display:grid;grid-template-columns:240px 1fr;
+  max-width:1300px;margin:0 auto;
   min-height:calc(100vh - 52px);
+  padding:0 24px;
+  gap:24px;
+}
+
+/* ── Mobile breakpoint ── */
+/* Tablet responsiveness */
+@media(max-width:1024px){
+  .r-layout{
+    grid-template-columns:220px 1fr;
+    gap:16px;
+    padding:0 16px;
+  }
 }
 
 /* ── Mobile breakpoint ── */
 @media(max-width:760px){
-  .r-layout{grid-template-columns:1fr;}
+  .r-layout{grid-template-columns:1fr; padding:0;}
   .r-bar-sidebar-toggle{display:flex;align-items:center;justify-content:center;}
   .r-bar-sep{display:none;}
   .r-bar-logo{font-size:15px;}
@@ -128,11 +140,17 @@
 
 /* Reading stats bar */
 .reading-stats-bar{
-  width:100%;max-width:680px;
+  width:100%;max-width:860px;
   display:flex;flex-wrap:wrap;gap:16px;
-  padding:8px 16px;margin-bottom:12px;
+  padding:8px 12px;margin-bottom:12px;
   font-family:'DM Sans',sans-serif;font-size:12px;
   color:var(--ink3);
+}
+@media(max-width:1024px){
+  .reading-stats-bar{max-width:740px;}
+}
+@media(max-width:760px){
+  .reading-stats-bar{max-width:100%; padding-left:0;}
 }
 .stat-item{
   display:inline-flex;align-items:center;gap:4px;
@@ -143,7 +161,7 @@
 
 /* The actual book page container */
 .book-page{
-  width:100%;max-width:680px;
+  width:100%;max-width:860px;
   background:var(--paper);
   border-radius:4px 16px 16px 4px;
   box-shadow:
@@ -153,6 +171,13 @@
   padding:56px 64px;
   position:relative;
   min-height:600px;
+  transition: max-width 0.2s, padding 0.2s;
+}
+@media(max-width:1024px){
+  .book-page{
+    padding:40px 48px;
+    max-width:740px;
+  }
 }
 /* Book spine effect */
 .book-page::before{
@@ -172,7 +197,12 @@
   background:var(--rule);
 }
 @media(max-width:760px){
-  .book-page{padding:32px 24px;border-radius:12px;box-shadow:var(--shadow-md);}
+  .book-page{
+    padding:32px 24px;
+    border-radius:12px;
+    box-shadow:var(--shadow-md);
+    max-width:100%;
+  }
   .book-page::before{display:none;}
 }
 
@@ -187,7 +217,13 @@
 .book-chapter-label{
   font-size:11px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;
   color:var(--ink4);margin-bottom:8px;
-  width:100%;max-width:680px;padding-left:16px;
+  width:100%;max-width:860px;padding-left:16px;
+}
+@media(max-width:1024px){
+  .book-chapter-label{max-width:740px;}
+}
+@media(max-width:760px){
+  .book-chapter-label{max-width:100%; padding-left:0;}
 }
 
 /* Doc title inside book */

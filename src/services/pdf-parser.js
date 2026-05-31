@@ -175,6 +175,8 @@ export async function extractPDF(file) {
           shouldMerge = true;
         } else if (startsWithLowercase) {
           shouldMerge = true;
+        } else if (currentWordCount < 60) {
+          shouldMerge = true;
         }
 
         if (shouldMerge) {

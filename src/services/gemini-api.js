@@ -59,7 +59,7 @@ export async function generateParagraphSummaries(blocks, title, key, onStepChang
   }
   if (!paras.length) return blocks;
 
-  const BATCH = 40;
+  const BATCH = 15;
   const totalBatches = Math.ceil(paras.length / BATCH);
   const map = {};
   
@@ -85,7 +85,7 @@ CURRENT SECTION: "${currentSectionHeading}"
 ${ctx}
 
 TASK:
-For each numbered paragraph below, write one summary of 8–14 words.
+For each paragraph below, write a short, understandable summary. The summary should be a concise, clear sentence (typically 8–18 words) that captures the core concept. It must be written from the perspective of an expert tutor helping a student learn.
 
 RULES — follow every one:
 1. NARRATIVE FLOW: Each summary must read as a natural continuation of the previous one — like breadcrumbs through a story, not isolated facts. A student should be able to read only the summaries and still understand the chapter arc.
@@ -103,9 +103,9 @@ RULES — follow every one:
 
 5. BE A TRIGGER, NOT A SPOILER: Give enough to recognise the idea and want to click — not so much that clicking feels unnecessary.
 
-6. SHORT PARAGRAPHS / CAPTIONS: If a paragraph is fewer than 15 words or appears to be a figure caption, label, or header — return: {"id": N, "summary": "__skip__"}
+6. SHORT PARAGRAPHS / CAPTIONS: If a paragraph is fewer than 15 words or appears to be a figure caption, label, or header — return "__skip__" as the summary.
 
-7. UNKNOWN / GARBLED TEXT: If a paragraph is unreadable (OCR artifacts, symbols only) — return: {"id": N, "summary": "__skip__"}
+7. UNKNOWN / GARBLED TEXT: If a paragraph is unreadable (OCR artifacts, symbols only) — return "__skip__" as the summary.
 
 EXAMPLES:
 Paragraph: "The process of photosynthesis involves the absorption of light energy by chlorophyll, conversion of light to chemical energy, splitting of water molecules, and reduction of CO₂ to carbohydrates. These steps do not necessarily occur sequentially."
@@ -116,13 +116,13 @@ Paragraph: "When there is a lack of oxygen in muscle cells, pyruvate converts to
 Good summary: "Lactic acid builds up when muscles run low on oxygen — causing cramps."
 Bad summary:  "A different chemical pathway occurs when oxygen is unavailable to cells."
 
-Return ONLY valid JSON — no markdown, no backticks, no explanation:
-[{"id": 0, "summary": "..."}, {"id": 1, "summary": "..."}]
+Return ONLY valid JSON — a flat array of strings corresponding to each paragraph in order. No markdown, no backticks, no explanation:
+["summary of first paragraph", "summary of second paragraph", ...]
 
 PARAGRAPHS:
-${batch.map((p, idx) => `[${idx}] ${p.text}`).join('\n\n')}`;
+${batch.map((p, idx) => `[Paragraph ${idx + 1}] ${p.text}`).join('\n\n')}`;
 
-    const maxTokens = Math.max(4096, batch.length * 120);
+    const maxTokens = Math.max(4096, batch.length * 150);
 
     const res = await fetchWithRetry(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
@@ -138,12 +138,7 @@ ${batch.map((p, idx) => `[${idx}] ${p.text}`).join('\n\n')}`;
             responseSchema: {
               type: 'ARRAY',
               items: {
-                type: 'OBJECT',
-                properties: {
-                  id: { type: 'INTEGER' },
-                  summary: { type: 'STRING' }
-                },
-                required: ['id', 'summary']
+                type: 'STRING'
               }
             }
           }
@@ -165,13 +160,13 @@ ${batch.map((p, idx) => `[${idx}] ${p.text}`).join('\n\n')}`;
     try {
       const parsed = JSON.parse(jsonText);
       if (Array.isArray(parsed)) {
-        parsed.forEach((x, index) => {
-          const localId = (x.id !== undefined && batch[x.id] !== undefined)
-            ? x.id
-            : index;
-          const targetPara = batch[localId];
-          if (targetPara) {
-            map[targetPara.id] = x.summary;
+        batch.forEach((targetPara, index) => {
+          const summary = parsed[index];
+          if (summary !== undefined) {
+            map[targetPara.id] = summary;
+          } else {
+            // Fallback for this individual paragraph
+            map[targetPara.id] = targetPara.text.split(' ').slice(0, 12).join(' ') + '…';
           }
         });
       } else {
@@ -180,7 +175,7 @@ ${batch.map((p, idx) => `[${idx}] ${p.text}`).join('\n\n')}`;
     } catch (e) {
       console.error("Gemini summary JSON parse error:", e, "Raw response:", raw);
       batch.forEach(p => {
-        map[p.id] = p.text.split(' ').slice(0, 10).join(' ') + '…';
+        map[p.id] = p.text.split(' ').slice(0, 12).join(' ') + '…';
       });
     }
   }
@@ -188,7 +183,7 @@ ${batch.map((p, idx) => `[${idx}] ${p.text}`).join('\n\n')}`;
   let pj = 0;
   return blocks.map(b => {
     if (b.type === 'paragraph') {
-      const r = { ...b, summary: map[pj] || b.text.substring(0, 55) + '…' };
+      const r = { ...b, summary: map[pj] || b.text.split(' ').slice(0, 12).join(' ') + '…' };
       pj++;
       return r;
     }
