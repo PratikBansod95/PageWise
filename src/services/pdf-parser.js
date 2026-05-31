@@ -53,13 +53,20 @@ export async function extractPDF(file) {
 
     for (const item of tc.items) {
       const y = Math.round(item.transform[5]);
+      const x = Math.round(item.transform[4]);
       const fs = Math.round(Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2));
       if (!cur || Math.abs(cur.y - y) > 3) {
         if (cur) lines.push(cur);
-        cur = { y, text: '', fontSize: fs };
+        cur = { y, text: '', fontSize: fs, items: [] };
       }
-      cur.text += item.str;
-      if (item.hasEOL) cur.text += ' ';
+      
+      // Filter out overlapping bold duplicates drawn at the same horizontal/vertical coordinate
+      const isDup = cur.items.some(it => Math.abs(it.x - x) < 3 && it.str === item.str);
+      if (!isDup) {
+        cur.text += item.str;
+        if (item.hasEOL) cur.text += ' ';
+        cur.items.push({ x, str: item.str });
+      }
     }
     if (cur) lines.push(cur);
 
@@ -84,7 +91,7 @@ export async function extractPDF(file) {
       if (j > 0 && pBuf.length) {
         const prevLn = lines[j - 1];
         const gap = Math.abs(ln.y - prevLn.y);
-        const isParaBreak = (avgGap > 0 && gap > avgGap * 1.35) || (gap > ln.fontSize * 1.7);
+        const isParaBreak = (avgGap > 0 && gap > avgGap * 1.25) || (gap > ln.fontSize * 1.5);
         if (isParaBreak) {
           pushParagraph(pBuf.join(' '), i);
           pBuf = [];

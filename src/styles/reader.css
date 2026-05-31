@@ -198,20 +198,24 @@
   border-radius:8px;
   transition:all 0.25s ease;
   border-left:3px solid transparent;
+  cursor:pointer;
+}
+.para-block:hover{
+  background:var(--gold-soft);
+}
+.para-block.active:hover{
+  background:linear-gradient(135deg,var(--paper),var(--paper2));
 }
 
 .para-summary-row{
   display:flex;align-items:flex-start;
   padding:8px 12px;
-  cursor:pointer;border-radius:6px;
+  border-radius:6px;
   transition:all 0.25s ease;
   user-select:none;
   max-height:100px;
   opacity:1;
   overflow:hidden;
-}
-.para-summary-row:hover{
-  background:var(--paper);
 }
 
 .para-chev{

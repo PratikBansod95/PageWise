@@ -26,7 +26,7 @@ For each paragraph, write a concise summary of 8-14 words. The summaries MUST:
 Return ONLY valid JSON: [{"id":0,"summary":"..."}]
 
 Paragraphs:
-${batch.map(p => `[${p.id}] ${p.text}`).join('\n\n')}`;
+${batch.map((p, idx) => `[${idx}] ${p.text}`).join('\n\n')}`;
 
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
       method: 'POST',
@@ -72,11 +72,12 @@ ${batch.map(p => `[${p.id}] ${p.text}`).join('\n\n')}`;
       const parsed = JSON.parse(jsonText);
       if (Array.isArray(parsed)) {
         parsed.forEach((x, index) => {
-          const targetId = (x.id !== undefined && paras[x.id] !== undefined)
+          const localId = (x.id !== undefined && batch[x.id] !== undefined)
             ? x.id
-            : (batch[index] ? batch[index].id : null);
-          if (targetId !== null) {
-            map[targetId] = x.summary;
+            : index;
+          const targetPara = batch[localId];
+          if (targetPara) {
+            map[targetPara.id] = x.summary;
           }
         });
       } else {

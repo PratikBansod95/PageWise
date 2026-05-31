@@ -107,7 +107,12 @@ export function buildReader(blocks, title, fname, apiKey) {
         </div>`;
 
       // Bind events programmatically
-      div.querySelector('.para-summary-row').addEventListener('click', () => toggle(idx));
+      div.addEventListener('click', (e) => {
+        if (e.target.closest('button, input, a, .quiz-opt-btn, .quiz-feedback')) {
+          return;
+        }
+        toggle(idx);
+      });
       div.querySelector('.tts-btn').addEventListener('click', (e) => readAloud(idx, e));
       div.querySelector('.quiz-btn').addEventListener('click', (e) => quizMe(idx, e, apiKey));
 
