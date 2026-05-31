@@ -14,35 +14,10 @@ export async function extractPDF(file) {
   const blocks = [];
   let title = '';
 
-  const splitParagraphIntoChunks = (text, maxWords = 80) => {
-    const sents = text.split(/(?<=[.!?])\s+/);
-    const chunks = [];
-    let curChunk = [];
-    let curCount = 0;
-    for (const s of sents) {
-      const trimS = s.trim();
-      if (!trimS) continue;
-      const words = trimS.split(/\s+/).length;
-      if (curCount + words > maxWords && curChunk.length > 0) {
-        chunks.push(curChunk.join(' '));
-        curChunk = [trimS];
-        curCount = words;
-      } else {
-        curChunk.push(trimS);
-        curCount += words;
-      }
-    }
-    if (curChunk.length > 0) chunks.push(curChunk.join(' '));
-    return chunks;
-  };
-
   const pushParagraph = (text, page) => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    const chunks = splitParagraphIntoChunks(trimmed, 80);
-    for (const chunk of chunks) {
-      blocks.push({ type: 'paragraph', text: chunk, page });
-    }
+    blocks.push({ type: 'paragraph', text: trimmed, page });
   };
 
   for (let i = 1; i <= pdf.numPages; i++) {
