@@ -3,29 +3,88 @@
  * Uses structured JSON output schemas and robust parsing heuristics.
  */
 
+function guessDocType(title) {
+  const t = title.toLowerCase();
+  if (t.includes('biology') || t.includes('science') || t.includes('chem') || t.includes('phys') || t.includes('medic') || t.includes('cell')) return 'science textbook';
+  if (t.includes('paper') || t.includes('journal') || t.includes('ieee') || t.includes('research') || t.includes('study')) return 'research paper';
+  if (t.includes('history') || t.includes('social') || t.includes('civic') || t.includes('epoch')) return 'history notes';
+  if (t.includes('law') || t.includes('court') || t.includes('legal') || t.includes('statute') || t.includes('act')) return 'law';
+  return 'general';
+}
+
 export async function generateParagraphSummaries(blocks, title, key, onStepChange) {
   if (onStepChange) onStepChange(3);
-  const paras = blocks.filter(b => b.type === 'paragraph').map((b, i) => ({ id: i, text: b.text }));
+  
+  const docType = guessDocType(title);
+  
+  let currentSec = 'General';
+  const paras = [];
+  let pi = 0;
+  for (const b of blocks) {
+    if (b.type === 'h1' || b.type === 'h2' || b.type === 'h3') {
+      currentSec = b.text;
+    } else if (b.type === 'paragraph') {
+      paras.push({ id: pi, text: b.text, section: currentSec });
+      pi++;
+    }
+  }
   if (!paras.length) return blocks;
 
   const BATCH = 40;
   const map = {};
   for (let s = 0; s < paras.length; s += BATCH) {
     const batch = paras.slice(s, s + BATCH);
-    const ctx = s > 0 ? `Context — recent summaries: ${Object.values(map).slice(-3).join(' | ')}` : '';
-    const prompt = `You are an expert cognitive learning assistant specialized in helping students (including those with ADHD) study complex texts.
-You are generating a focus-reading interface for the document "${title}".
+    
+    const prevSummaries = Object.values(map).slice(-3).filter(x => x && x !== '__skip__');
+    const ctx = prevSummaries.length 
+      ? `CONTEXT: Previous summaries for flow continuity: ${prevSummaries.join(' | ')}`
+      : '';
+      
+    const currentSectionHeading = batch[0].section || 'General';
+
+    const prompt = `You are an expert cognitive learning assistant helping students — including those with ADHD — study complex texts using a focus-reading interface.
+
+DOCUMENT: "${title}"
+DOCUMENT TYPE: ${docType}
+CURRENT SECTION: "${currentSectionHeading}"
 ${ctx}
-For each paragraph, write a concise summary of 8-14 words. The summaries MUST:
-- Create a continuous, narrative-like flow (Hebb's breadcrumbs) where each summary naturally connects to the previous one, forming a cohesive study guide.
-- Use plain, active, and direct language. Avoid dense academic jargon or passive constructions.
-- Focus on the core conceptual takeaway or application rather than dry descriptions.
-- NEVER start with meta-phrases like "This paragraph talks about...", "Here, the author...", "The section details..."
-- Act as an engaging mental trigger that gives enough context to remember the idea, but encourages clicking to read details.
 
-Return ONLY valid JSON: [{"id":0,"summary":"..."}]
+TASK:
+For each numbered paragraph below, write one summary of 8–14 words.
 
-Paragraphs:
+RULES — follow every one:
+1. NARRATIVE FLOW: Each summary must read as a natural continuation of the previous one — like breadcrumbs through a story, not isolated facts. A student should be able to read only the summaries and still understand the chapter arc.
+
+2. SURFACE THE KEY TERM: If the paragraph introduces or defines a named concept, process, molecule, person, law, or event — that word MUST appear in the summary.
+   Bad:  "Energy is stored and used by cells for various functions."
+   Good: "ATP stores cellular energy — spent whenever the cell does work."
+
+3. ACTIVE + DIRECT: Use active voice and plain English. No passive constructions. No jargon unless it is the key term (Rule 2).
+   Bad:  "The process by which autotrophs synthesise food is described."
+   Good: "Plants make their own food from sunlight, CO₂, and water."
+
+4. NEVER USE META-OPENERS: Do not start with:
+   "This paragraph...", "Here the author...", "The section details...", "We learn that...", "It is explained that..."
+
+5. BE A TRIGGER, NOT A SPOILER: Give enough to recognise the idea and want to click — not so much that clicking feels unnecessary.
+
+6. SHORT PARAGRAPHS / CAPTIONS: If a paragraph is fewer than 15 words or appears to be a figure caption, label, or header — return: {"id": N, "summary": "__skip__"}
+
+7. UNKNOWN / GARBLED TEXT: If a paragraph is unreadable (OCR artifacts, symbols only) — return: {"id": N, "summary": "__skip__"}
+
+EXAMPLES:
+Paragraph: "The process of photosynthesis involves the absorption of light energy by chlorophyll, conversion of light to chemical energy, splitting of water molecules, and reduction of CO₂ to carbohydrates. These steps do not necessarily occur sequentially."
+Good summary: "Photosynthesis converts light into sugar through four non-sequential chemical steps."
+Bad summary:  "The process of making food using light energy is described in detail here."
+
+Paragraph: "When there is a lack of oxygen in muscle cells, pyruvate converts to lactic acid instead of entering the mitochondria. This buildup causes the familiar cramping sensation."
+Good summary: "Lactic acid builds up when muscles run low on oxygen — causing cramps."
+Bad summary:  "A different chemical pathway occurs when oxygen is unavailable to cells."
+
+Return ONLY valid JSON — no markdown, no backticks, no explanation:
+[{"id": 0, "summary": "..."}, {"id": 1, "summary": "..."}]
+
+PARAGRAPHS:
 ${batch.map((p, idx) => `[${idx}] ${p.text}`).join('\n\n')}`;
 
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
@@ -91,11 +150,11 @@ ${batch.map((p, idx) => `[${idx}] ${p.text}`).join('\n\n')}`;
     }
   }
 
-  let pi = 0;
+  let pj = 0;
   return blocks.map(b => {
     if (b.type === 'paragraph') {
-      const r = { ...b, summary: map[pi] || b.text.substring(0, 55) + '…' };
-      pi++;
+      const r = { ...b, summary: map[pj] || b.text.substring(0, 55) + '…' };
+      pj++;
       return r;
     }
     return b;

@@ -289,8 +289,29 @@
 }
 
 /* ADHD Focus-Dimming: when any block is active, fade and blur all OTHER blocks */
-.r-main:has(.para-block.active) .para-block:not(.active) {
+.r-main:has(.para-block.active) .para-block:not(.active):not(.skip-summary) {
   opacity: 0.35;
   filter: grayscale(15%) blur(0.2px);
   transform: scale(0.995);
+}
+
+/* Skip Summary paragraphs (captions, short tags, labels) styling */
+.para-block.skip-summary {
+  cursor: default !important;
+  border-left-color: transparent !important;
+  box-shadow: none !important;
+  background: none !important;
+  margin-bottom: 24px;
+}
+.para-block.skip-summary .para-full {
+  max-height: none !important;
+  opacity: 1 !important;
+}
+.para-block.skip-summary:hover {
+  background: none !important;
+}
+.r-main:has(.para-block.active) .para-block.skip-summary {
+  opacity: 0.85;
+  filter: none;
+  transform: none;
 }

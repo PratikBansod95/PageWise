@@ -85,36 +85,47 @@ export function buildReader(blocks, title, fname, apiKey) {
       const idx = pi;
       paragraphTexts.push(b.text);
 
+      const isSkip = b.summary === '__skip__';
       const div = document.createElement('div');
-      div.className = 'para-block fade-up';
+      div.className = 'para-block fade-up' + (isSkip ? ' skip-summary' : '');
       div.style.animationDelay = Math.min(delay * 20, 300) + 'ms';
       div.dataset.index = idx;
 
       const sents = splitSents(b.text).map(s => `<p>${escHtml(s)}</p>`).join('');
-      div.innerHTML = `
+      
+      const summaryRowHtml = isSkip ? '' : `
         <div class="para-summary-row">
           <span class="para-sum-text">${escHtml(b.summary || '…')}</span>
-        </div>
-        <div class="para-full">
-          <div class="para-full-inner">
-            ${sents}
+        </div>`;
+        
+      const actionsHtml = isSkip ? '' : `
             <div class="para-actions" style="margin-top: 16px; display: flex; gap: 8px; border-top: 1px solid var(--rule); padding-top: 12px;">
               <button class="r-btn tts-btn">Listen 🔊</button>
               <button class="r-btn quiz-btn">Quiz Me 🧠</button>
             </div>
-            <div class="para-quiz-container" id="quiz-${idx}" style="display: none; width: 100%;"></div>
+            <div class="para-quiz-container" id="quiz-${idx}" style="display: none; width: 100%;"></div>`;
+
+      div.innerHTML = `
+        ${summaryRowHtml}
+        <div class="para-full">
+          <div class="para-full-inner" style="${isSkip ? 'border-left: none; margin-left: 0; padding: 0;' : ''}">
+            ${sents}
+            ${actionsHtml}
           </div>
         </div>`;
 
       // Bind events programmatically
       div.addEventListener('click', (e) => {
+        if (isSkip) return;
         if (e.target.closest('button, input, a, .quiz-opt-btn, .quiz-feedback')) {
           return;
         }
         toggle(idx);
       });
-      div.querySelector('.tts-btn').addEventListener('click', (e) => readAloud(idx, e));
-      div.querySelector('.quiz-btn').addEventListener('click', (e) => quizMe(idx, e, apiKey));
+      if (!isSkip) {
+        div.querySelector('.tts-btn').addEventListener('click', (e) => readAloud(idx, e));
+        div.querySelector('.quiz-btn').addEventListener('click', (e) => quizMe(idx, e, apiKey));
+      }
 
       page.appendChild(div);
       allBlocks.push(div);
