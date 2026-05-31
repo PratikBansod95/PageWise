@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pagewise — Read Deeper</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&family=Playfair+Display:ital,wght@0,700;0,900;1,700&display=swap" rel="stylesheet">
+  
+  <!-- PDF.js Global library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <!-- Modular stylesheets -->
+  <link rel="stylesheet" href="/src/styles/theme.css">
+  <link rel="stylesheet" href="/src/styles/reader.css">
+  <link rel="stylesheet" href="/src/styles/components.css">
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════
+       LANDING
+  ═══════════════════════════════════════ -->
+  <div id="landing">
+    <div class="land-bg"></div>
+
+    <nav class="nav">
+      <a class="nav-logo" href="#">
+        <div class="nav-logo-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+            <ellipse cx="12" cy="12" rx="10" ry="4.5"/>
+            <circle cx="12" cy="12" r="2" fill="white" stroke="none"/>
+          </svg>
+        </div>
+        Pagewise
+      </a>
+      <span class="nav-tag">Free Beta</span>
+    </nav>
+
+    <section class="hero">
+      <!-- Floating book -->
+      <div class="book-showcase">
+        <div class="sparkle"></div>
+        <div class="sparkle"></div>
+        <div class="sparkle"></div>
+        <div class="sparkle"></div>
+        <div class="book-3d">
+          <div class="book-spine"></div>
+          <div class="book-cover">
+            <div class="book-cover-title">Your PDF,<br>Transformed</div>
+            <div class="book-cover-line"></div>
+            <div class="book-cover-sub">Focus Edition</div>
+          </div>
+          <div class="book-pages"></div>
+        </div>
+      </div>
+
+      <div class="hero-eyebrow">
+        <span class="eyebrow-dot"></span>
+        AI-powered focus reading
+      </div>
+
+      <h1 class="hero-h1">Turn any PDF into<br>a <em>magical book</em></h1>
+      <h2 class="hero-h2">that you'll actually finish reading</h2>
+
+      <p class="hero-desc">
+        Upload any textbook, paper, or notes. Pagewise transforms it into a beautiful
+        focus-reading experience — <strong>one paragraph at a time</strong>, with AI summaries
+        for everything else. Designed for <strong>ADHD minds</strong> and everyone who
+        wants to read deeper.
+      </p>
+
+      <!-- Before / After -->
+      <div class="transform-preview">
+        <div class="preview-card">
+          <div class="preview-card-label before">Boring PDF</div>
+          <div class="preview-line" style="width:90%"></div>
+          <div class="preview-line" style="width:100%"></div>
+          <div class="preview-line" style="width:75%"></div>
+          <div class="preview-line" style="width:95%"></div>
+          <div class="preview-line" style="width:85%"></div>
+          <div class="preview-line" style="width:60%"></div>
+          <div class="preview-line" style="width:90%"></div>
+        </div>
+        <div class="preview-arrow">✦</div>
+        <div class="preview-card">
+          <div class="preview-card-label after">Pagewise Book</div>
+          <div class="preview-line active">
+            <span>Living things maintain order through constant molecular movement — the very definition of life.</span>
+          </div>
+          <div class="preview-line" style="width:100%;opacity:0.4"></div>
+          <div class="preview-line" style="width:90%;opacity:0.4"></div>
+          <div class="preview-line" style="width:80%;opacity:0.4"></div>
+        </div>
+      </div>
+
+      <!-- Input card -->
+      <div class="input-card">
+        <span class="field-label">Your Gemini API Key</span>
+        <div class="key-row">
+          <input type="password" class="key-input" id="apiKeyInput"
+            placeholder="AIzaSy… (free from Google AI Studio)" autocomplete="off">
+          <button class="key-btn" onclick="saveKey()">Save</button>
+        </div>
+        <div class="key-note">
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="5"/><path d="M6 5.5v3M6 4h.01"/></svg>
+          Stored only in this browser tab.
+          <a href="https://aistudio.google.com/app/apikey" target="_blank">Get a free key →</a>
+        </div>
+        <div class="divider">
+          <div class="divider-line"></div>
+          <span class="divider-text">then drop your PDF</span>
+          <div class="divider-line"></div>
+        </div>
+        <div class="upload-zone" id="uploadZone">
+          <input type="file" id="fileInput" accept=".pdf" onchange="handleFile(event)">
+          <div class="upload-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="12" y1="18" x2="12" y2="12"/>
+              <polyline points="9 15 12 12 15 15"/>
+            </svg>
+          </div>
+          <div class="upload-title">Drop your PDF here</div>
+          <div class="upload-sub">Textbooks, papers, notes — any digital PDF</div>
+        </div>
+      </div>
+
+      <!-- Feature strip -->
+      <div class="features-strip">
+        <div class="feat"><div class="feat-icon">◎</div><div class="feat-text">Fish-eye focus</div></div>
+        <div class="feat"><div class="feat-icon">✦</div><div class="feat-text">AI summaries</div></div>
+        <div class="feat"><div class="feat-icon">🖼</div><div class="feat-text">Images intact</div></div>
+        <div class="feat"><div class="feat-icon">⌨</div><div class="feat-text">Keyboard nav</div></div>
+        <div class="feat"><div class="feat-icon">🔒</div><div class="feat-text">100% private</div></div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <div style="border-top:1px solid var(--rule);background:white;width:100%;">
+      <div class="how-section">
+        <h2 class="how-title">How the <em>magic</em> happens</h2>
+        <p class="how-sub">Three steps from boring PDF to beautiful focused book</p>
+        <div class="how-steps">
+          <div class="how-step-card">
+            <div class="step-num">01</div>
+            <div class="step-icon">📄</div>
+            <div class="step-title">Upload your PDF</div>
+            <div class="step-body">Any textbook, research paper, or class notes. Pagewise extracts every paragraph, heading, and structure — preserving the original flow.</div>
+          </div>
+          <div class="how-step-card">
+            <div class="step-num">02</div>
+            <div class="step-icon">✦</div>
+            <div class="step-title">AI reads it first</div>
+            <div class="step-body">Gemini AI generates a focused 8–14 word summary for every paragraph — written like story breadcrumbs, not dictionary entries.</div>
+          </div>
+          <div class="how-step-card">
+            <div class="step-num">03</div>
+            <div class="step-icon">📖</div>
+            <div class="step-title">Read with total focus</div>
+            <div class="step-body">Click any paragraph to expand it fully. Everything else fades to summaries. Your brain stays locked on exactly one thing at a time.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       PROCESSING
+  ═══════════════════════════════════════ -->
+  <div id="processing" style="display:none;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;">
+    <div class="proc-wrap">
+      <div class="proc-book">
+        <div class="proc-book-spine"></div>
+        <div class="proc-book-l"></div>
+        <div class="proc-book-r"></div>
+      </div>
+      <div class="proc-title">Transforming your PDF…</div>
+      <div class="proc-sub">Usually takes 20–40 seconds</div>
+      <div class="proc-steps">
+        <div class="pstep active" id="step1"><div class="pstep-dot"></div>Reading PDF structure and text</div>
+        <div class="pstep" id="step2"><div class="pstep-dot"></div>Sending to Gemini AI</div>
+        <div class="pstep" id="step3"><div class="pstep-dot"></div>Crafting focus summaries for every paragraph</div>
+        <div class="pstep" id="step4"><div class="pstep-dot"></div>Building your beautiful book view</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       READER
+  ═══════════════════════════════════════ -->
+  <div id="reader">
+    <div class="r-bar">
+      <div class="r-bar-logo">Page<em>wise</em></div>
+      <div class="r-bar-sep"></div>
+      <div class="r-bar-docname" id="rDocName">—</div>
+      <div class="r-bar-actions">
+        <button class="r-btn" id="fontToggleBtn" onclick="toggleFont()" style="min-width: 90px; justify-content: center;">Serif 📖</button>
+        <div class="fs-ctrl">
+          <button onclick="chgFs(-1)">A−</button>
+          <span id="fsLabel">18</span>
+          <button onclick="chgFs(1)">A+</button>
+        </div>
+        <button class="r-btn" onclick="collapseAll()">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 3l4 4 4-4"/></svg>
+          Collapse
+        </button>
+        <button class="r-btn" onclick="goHome()">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 5l4-4 4 4M2 4.5V9h2V7h2v2h2V4.5"/></svg>
+          New doc
+        </button>
+      </div>
+      <div class="r-progress" id="rProg" style="width:0%"></div>
+    </div>
+
+    <div class="r-layout">
+      <aside class="r-sidebar" id="rSidebar"></aside>
+      <main class="r-main" id="rMain"></main>
+    </div>
+
+    <div class="kbd-hint">
+      <kbd>↓</kbd> next &nbsp;<kbd>↑</kbd> prev &nbsp;<kbd>Esc</kbd> collapse
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- Modular entry point -->
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
