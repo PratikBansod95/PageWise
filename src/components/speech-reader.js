@@ -35,6 +35,19 @@ export function readAloud(idx, e) {
   if (!text) return;
   
   const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = 'en-US';
+  utterance.rate = 0.95;
+  utterance.pitch = 1.0;
+  
+  // Prefer a natural-sounding voice if available
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length) {
+    const preferred = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Enhanced') || v.name.includes('Google')))
+      || voices.find(v => v.lang.startsWith('en') && !v.localService)
+      || voices.find(v => v.lang.startsWith('en'));
+    if (preferred) utterance.voice = preferred;
+  }
+  
   utterance.onend = () => {
     if (activeSpeechIdx === idx) {
       activeSpeechIdx = -1;

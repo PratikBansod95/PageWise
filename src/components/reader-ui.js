@@ -14,7 +14,15 @@ export let curIdx = -1;
 export let fontSize = 18;
 export let fontMode = 0; // 0: Serif, 1: Sans-Serif, 2: Dyslexic Style
 
+// Track scroll handler for cleanup
+let _scrollHandler = null;
+let _currentApiKey = null;
+
 export function buildReader(blocks, title, fname, apiKey) {
+  // Cleanup any previous reader session
+  cleanupReader();
+
+  _currentApiKey = apiKey;
   const main = document.getElementById('rMain');
   const sidebar = document.getElementById('rSidebar');
   if (!main || !sidebar) return;
@@ -26,6 +34,8 @@ export function buildReader(blocks, title, fname, apiKey) {
   allBlocks.length = 0;
   paragraphTexts.length = 0;
   curIdx = -1;
+
+  const isDemo = !apiKey;
 
   // Chapter label
   const clabel = document.createElement('div');
@@ -46,6 +56,8 @@ export function buildReader(blocks, title, fname, apiKey) {
 
   let pi = 0;
   let delay = 0;
+  let slugCounts = {};
+
   for (const b of blocks) {
     if (b.type === 'pagebreak') {
       const pm = document.createElement('div');
@@ -57,7 +69,7 @@ export function buildReader(blocks, title, fname, apiKey) {
     if (b.type === 'h1') {
       const el = document.createElement('div');
       el.className = 'c-h1 fade-up';
-      el.id = 'h-' + slug(b.text);
+      el.id = uniqueSlug(b.text, slugCounts);
       el.textContent = b.text;
       page.appendChild(el);
       addSbItem(sidebar, b.text, el, 'h1');
@@ -66,7 +78,7 @@ export function buildReader(blocks, title, fname, apiKey) {
     if (b.type === 'h2') {
       const el = document.createElement('div');
       el.className = 'c-h2 fade-up';
-      el.id = 'h-' + slug(b.text);
+      el.id = uniqueSlug(b.text, slugCounts);
       el.textContent = b.text;
       page.appendChild(el);
       addSbItem(sidebar, b.text, el, 'h2');
@@ -75,7 +87,7 @@ export function buildReader(blocks, title, fname, apiKey) {
     if (b.type === 'h3') {
       const el = document.createElement('div');
       el.className = 'c-h3 fade-up';
-      el.id = 'h-' + slug(b.text);
+      el.id = uniqueSlug(b.text, slugCounts);
       el.textContent = b.text;
       page.appendChild(el);
       addSbItem(sidebar, b.text, el, 'h3');
@@ -98,12 +110,24 @@ export function buildReader(blocks, title, fname, apiKey) {
           <span class="para-sum-text">${escHtml(b.summary || '…')}</span>
         </div>`;
         
-      const actionsHtml = isSkip ? '' : `
-            <div class="para-actions" style="margin-top: 16px; display: flex; gap: 8px; border-top: 1px solid var(--rule); padding-top: 12px;">
+      let actionsHtml = '';
+      if (!isSkip) {
+        if (isDemo) {
+          // Demo mode: show disabled buttons with tooltip
+          actionsHtml = `
+            <div class="para-actions">
+              <button class="r-btn tts-btn" disabled title="Upload your own PDF to use Listen">Listen 🔊</button>
+              <button class="r-btn quiz-btn" disabled title="Upload your own PDF to use Quiz">Quiz Me 🧠</button>
+            </div>`;
+        } else {
+          actionsHtml = `
+            <div class="para-actions">
               <button class="r-btn tts-btn">Listen 🔊</button>
               <button class="r-btn quiz-btn">Quiz Me 🧠</button>
             </div>
             <div class="para-quiz-container" id="quiz-${idx}" style="display: none; width: 100%;"></div>`;
+        }
+      }
 
       div.innerHTML = `
         ${summaryRowHtml}
@@ -122,9 +146,9 @@ export function buildReader(blocks, title, fname, apiKey) {
         }
         toggle(idx);
       });
-      if (!isSkip) {
+      if (!isSkip && !isDemo) {
         div.querySelector('.tts-btn').addEventListener('click', (e) => readAloud(idx, e));
-        div.querySelector('.quiz-btn').addEventListener('click', (e) => quizMe(idx, e, apiKey));
+        div.querySelector('.quiz-btn').addEventListener('click', (e) => quizMe(idx, e, _currentApiKey));
       }
 
       page.appendChild(div);
@@ -143,8 +167,30 @@ export function buildReader(blocks, title, fname, apiKey) {
   // Initialize Speech Synthesizer with refs
   initSpeech(paragraphTexts, allBlocks);
 
-  window.addEventListener('scroll', updateProg, { passive: true });
+  // Track the scroll handler so we can remove it later
+  _scrollHandler = updateProg;
+  window.addEventListener('scroll', _scrollHandler, { passive: true });
   updateProg();
+}
+
+/** Generate a unique slug ID, appending a counter suffix on collision */
+function uniqueSlug(text, counts) {
+  const base = 'h-' + slug(text);
+  if (!counts[base]) {
+    counts[base] = 1;
+    return base;
+  }
+  counts[base]++;
+  return base + '-' + counts[base];
+}
+
+/** Remove scroll listeners and cancel speech — call before rebuilding or going home */
+export function cleanupReader() {
+  if (_scrollHandler) {
+    window.removeEventListener('scroll', _scrollHandler);
+    _scrollHandler = null;
+  }
+  cancelSpeech();
 }
 
 function addSbItem(sb, text, el, cls) {
@@ -230,12 +276,24 @@ export function toggleFont() {
 
 export async function quizMe(idx, e, apiKey) {
   if (e) e.stopPropagation();
+  if (!apiKey) {
+    showToast('Upload a PDF with your API key to use quizzes.', 'err');
+    return;
+  }
+
   const container = document.getElementById('quiz-' + idx);
   if (!container) return;
 
   if (container.style.display === 'block') {
     container.style.display = 'none';
     return;
+  }
+
+  // Find and disable the quiz button to prevent double-clicks
+  const quizBtn = allBlocks[idx]?.querySelector('.quiz-btn');
+  if (quizBtn) {
+    quizBtn.disabled = true;
+    quizBtn.textContent = 'Loading…';
   }
 
   container.style.display = 'block';
@@ -253,10 +311,16 @@ export async function quizMe(idx, e, apiKey) {
   } catch (err) {
     console.error(err);
     container.innerHTML = `
-      <div class="q-box" style="border-left: 3px solid #8B2020; background: #FFF5F5; color: #8B2020; margin: 12px 0 0 0;">
-        <div class="q-label" style="color: #8B2020;">Error</div>
+      <div class="q-box quiz-error-box">
+        <div class="q-label" style="color: var(--danger-text);">Error</div>
         <p style="font-size: 12.5px;">Failed to generate quiz question. Check your API key and network connection.</p>
       </div>
     `;
+  } finally {
+    // Re-enable the quiz button
+    if (quizBtn) {
+      quizBtn.disabled = false;
+      quizBtn.textContent = 'Quiz Me 🧠';
+    }
   }
 }

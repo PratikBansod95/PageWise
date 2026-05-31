@@ -285,7 +285,7 @@ body{
 }
 
 .cta-secondary-btn {
-  background: white;
+  background: var(--paper);
   color: var(--ink2);
   border: 1px solid var(--rule);
   font-family: 'DM Sans', sans-serif;
@@ -325,7 +325,7 @@ body{
 }
 
 .feat-badge {
-  background: white;
+  background: var(--paper);
   border: 1px solid var(--rule);
   border-radius: 20px;
   padding: 6px 14px;
@@ -358,7 +358,7 @@ body{
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(221, 214, 200, 0.7);
+  border: 1px solid var(--rule);
   border-radius: 24px;
   width: 100%;
   max-width: 460px;
@@ -399,12 +399,12 @@ body{
 
 .w-tab:hover {
   color: var(--gold);
-  background: rgba(255, 255, 255, 0.5);
+  background: var(--gold-soft);
 }
 
 .w-tab.active {
   color: var(--ink);
-  background: white;
+  background: var(--paper);
   border-bottom: 2px solid var(--gold);
 }
 
@@ -710,7 +710,7 @@ body{
 }
 @media(max-width:680px){.how-steps{grid-template-columns:1fr;}}
 .how-step-card{
-  background:white;border:1px solid var(--rule);
+  background:var(--paper);border:1px solid var(--rule);
   border-radius:16px;padding:28px 24px;
   position:relative;overflow:hidden;
   transition:transform 0.3s,box-shadow 0.3s;
@@ -780,7 +780,7 @@ body{
   display:flex;align-items:center;gap:12px;
   padding:12px 16px;border-radius:10px;
   font-size:13px;color:var(--ink4);
-  background:white;border:1px solid var(--rule);
+  background:var(--paper);border:1px solid var(--rule);
   transition:all 0.3s;
 }
 .pstep.active{color:var(--gold);border-color:var(--gold-glow);background:var(--gold-soft);}
@@ -788,3 +788,14 @@ body{
 .pstep-dot{width:7px;height:7px;border-radius:50%;background:var(--rule);flex-shrink:0;transition:all 0.3s;}
 .pstep.active .pstep-dot{background:var(--gold);animation:eyePulse 1s infinite;}
 .pstep.done .pstep-dot{background:#2A7A4A;}
+
+/* Dark mode overrides for landing page elements */
+body.dark-mode .workspace-card {
+  background: rgba(30, 41, 59, 0.9);
+}
+body.dark-mode .key-btn:hover {
+  background: var(--paper2);
+}
+body.dark-mode .cta-primary-btn:hover {
+  box-shadow: 0 6px 20px var(--gold-glow);
+}

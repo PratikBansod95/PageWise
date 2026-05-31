@@ -1,13 +1,13 @@
 import { extractPDF } from './services/pdf-parser.js';
 import { generateParagraphSummaries } from './services/gemini-api.js';
-import { buildReader, collapseAll, chgFs, toggleFont, toggleByIndex, allBlocks, curIdx } from './components/reader-ui.js';
+import { buildReader, cleanupReader, collapseAll, chgFs, toggleFont, toggleByIndex, allBlocks, curIdx } from './components/reader-ui.js';
 import { showToast } from './utils.js';
 import { cancelSpeech } from './components/speech-reader.js';
 
 // Setup pdf worker globally
 window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-let apiKey = sessionStorage.getItem('z_key') || '';
+let apiKey = localStorage.getItem('z_key') || '';
 
 // Bind functions to window for HTML inline listeners compatibility
 window.saveKey = saveKey;
@@ -73,7 +73,7 @@ export function saveKey() {
     return;
   }
   apiKey = v;
-  sessionStorage.setItem('z_key', v);
+  localStorage.setItem('z_key', v);
   showToast('API key saved ✓', 'ok');
 }
 
@@ -90,14 +90,17 @@ export async function processFile(file) {
     return;
   }
   apiKey = key;
-  sessionStorage.setItem('z_key', key);
+  localStorage.setItem('z_key', key);
   show('processing');
   setStep(1);
   try {
     const { blocks, title } = await extractPDF(file);
     setStep(2);
     
-    const summarised = await generateParagraphSummaries(blocks, title, key, (step) => setStep(step));
+    const summarised = await generateParagraphSummaries(blocks, title, key, (step, progress) => {
+      setStep(step);
+      if (progress) updateBatchProgress(progress);
+    });
     setStep(4);
     
     buildReader(summarised, title, file.name, key);
@@ -107,6 +110,16 @@ export async function processFile(file) {
     show('landing');
     showToast('Error: ' + err.message, 'err');
     console.error(err);
+  }
+}
+
+function updateBatchProgress(progress) {
+  const stepEl = document.getElementById('step3');
+  if (stepEl) {
+    const textNode = stepEl.childNodes[stepEl.childNodes.length - 1];
+    if (textNode) {
+      textNode.textContent = `Crafting summaries — batch ${progress.current} of ${progress.total}`;
+    }
   }
 }
 
@@ -129,6 +142,9 @@ export function setStep(n) {
 }
 
 export function goHome() {
+  // Cleanup reader listeners before switching views
+  cleanupReader();
+  
   show('landing');
   const main = document.getElementById('rMain');
   const sidebar = document.getElementById('rSidebar');
@@ -195,7 +211,8 @@ const DEMO_BLOCKS = [
 
 export function loadDemoDoc() {
   show('reader');
-  buildReader(DEMO_BLOCKS, 'The Biology of Learning: Synaptic Plasticity', 'biology_of_learning_demo.pdf', 'demo-key');
+  // Pass null as API key for demo mode — disables quiz/TTS API calls
+  buildReader(DEMO_BLOCKS, 'The Biology of Learning: Synaptic Plasticity', 'biology_of_learning_demo.pdf', null);
   document.getElementById('reader')?.classList.add('loaded');
   showToast('Loaded demo document ✓', 'ok');
 }

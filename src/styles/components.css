@@ -151,6 +151,9 @@ body.dark-mode .quiz-feedback.incorrect strong {
   display:none;z-index:100;
 }
 #reader.loaded .kbd-hint{display:block;}
+@media(max-width:760px){
+  #reader.loaded .kbd-hint{display:none;}
+}
 kbd{
   background:var(--paper);border:1px solid var(--rule);
   border-radius:4px;padding:1px 5px;font-size:10px;
@@ -168,12 +171,44 @@ kbd{
   transition:transform 0.3s;max-width:380px;
   text-align:center;box-shadow:var(--shadow-lg);
 }
-.toast.err{border-color:#F5A0A0;background:#FFF5F5;color:#8B2020;}
-.toast.ok{border-color:#A0D4B0;background:#F5FFF8;color:#1A5C38;}
+.toast.err{border-color:rgba(239, 68, 68, 0.4);background:rgba(239, 68, 68, 0.06);color:#DC2626;}
+.toast.ok{border-color:rgba(16, 185, 129, 0.4);background:rgba(16, 185, 129, 0.06);color:#059669;}
 .toast.show{transform:translateX(-50%) translateY(0);}
+body.dark-mode .toast.err{color:#F87171;}
+body.dark-mode .toast.ok{color:#34D399;}
 
 @keyframes fadeUp{
   from{opacity:0;transform:translateY(16px)}
   to{opacity:1;transform:translateY(0)}
 }
 .fade-up{animation:fadeUp 0.35s ease both;}
+
+/* Paragraph action bar (Listen / Quiz buttons) */
+.para-actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--rule);
+  padding-top: 12px;
+}
+
+/* Quiz error box — dark-mode safe */
+.quiz-error-box {
+  border-left: 3px solid rgba(239, 68, 68, 0.6);
+  background: rgba(239, 68, 68, 0.06);
+  color: var(--ink2);
+  margin: 12px 0 0 0;
+}
+.quiz-error-box .q-label {
+  color: #DC2626;
+}
+body.dark-mode .quiz-error-box .q-label {
+  color: #F87171;
+}
+
+/* Disabled state for buttons */
+.r-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}

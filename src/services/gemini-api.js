@@ -3,6 +3,10 @@
  * Uses structured JSON output schemas and robust parsing heuristics.
  */
 
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1500;
+
 function guessDocType(title) {
   const t = title.toLowerCase();
   if (t.includes('biology') || t.includes('science') || t.includes('chem') || t.includes('phys') || t.includes('medic') || t.includes('cell')) return 'science textbook';
@@ -10,6 +14,31 @@ function guessDocType(title) {
   if (t.includes('history') || t.includes('social') || t.includes('civic') || t.includes('epoch')) return 'history notes';
   if (t.includes('law') || t.includes('court') || t.includes('legal') || t.includes('statute') || t.includes('act')) return 'law';
   return 'general';
+}
+
+/** Fetch with retry on transient errors (429, 500, 503) */
+async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(url, options);
+    
+    if (res.ok) return res;
+    
+    const isRetryable = res.status === 429 || res.status >= 500;
+    if (isRetryable && attempt < retries) {
+      const delay = RETRY_DELAY_MS * Math.pow(2, attempt);
+      console.warn(`Gemini API returned ${res.status}, retrying in ${delay}ms (attempt ${attempt + 1}/${retries})...`);
+      await new Promise(r => setTimeout(r, delay));
+      continue;
+    }
+    
+    // Non-retryable or exhausted retries — throw with safe error extraction
+    let errorMsg = `Gemini error ${res.status}`;
+    try {
+      const e = await res.json();
+      if (e.error?.message) errorMsg = e.error.message;
+    } catch { /* response wasn't JSON */ }
+    throw new Error(errorMsg);
+  }
 }
 
 export async function generateParagraphSummaries(blocks, title, key, onStepChange) {
@@ -31,9 +60,15 @@ export async function generateParagraphSummaries(blocks, title, key, onStepChang
   if (!paras.length) return blocks;
 
   const BATCH = 40;
+  const totalBatches = Math.ceil(paras.length / BATCH);
   const map = {};
+  
   for (let s = 0; s < paras.length; s += BATCH) {
     const batch = paras.slice(s, s + BATCH);
+    const batchNum = Math.floor(s / BATCH) + 1;
+    
+    // Report batch progress to the UI
+    if (onStepChange) onStepChange(3, { current: batchNum, total: totalBatches });
     
     const prevSummaries = Object.values(map).slice(-3).filter(x => x && x !== '__skip__');
     const ctx = prevSummaries.length 
@@ -87,34 +122,34 @@ Return ONLY valid JSON — no markdown, no backticks, no explanation:
 PARAGRAPHS:
 ${batch.map((p, idx) => `[${idx}] ${p.text}`).join('\n\n')}`;
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: 2048,
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: 'ARRAY',
-            items: {
-              type: 'OBJECT',
-              properties: {
-                id: { type: 'INTEGER' },
-                summary: { type: 'STRING' }
-              },
-              required: ['id', 'summary']
+    const maxTokens = Math.max(4096, batch.length * 120);
+
+    const res = await fetchWithRetry(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: maxTokens,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: 'ARRAY',
+              items: {
+                type: 'OBJECT',
+                properties: {
+                  id: { type: 'INTEGER' },
+                  summary: { type: 'STRING' }
+                },
+                required: ['id', 'summary']
+              }
             }
           }
-        }
-      })
-    });
-
-    if (!res.ok) {
-      const e = await res.json();
-      throw new Error(e.error?.message || `Gemini error ${res.status}`);
-    }
+        })
+      }
+    );
 
     const data = await res.json();
     const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
@@ -174,35 +209,33 @@ Create:
 - The correct answer index (0, 1, or 2).
 - A short, encouraging, and clear explanation of why the correct answer is right and why it matters, reinforcing the learning loop.`;
 
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.5,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'OBJECT',
-          properties: {
-            question: { type: 'STRING' },
-            options: {
-              type: 'ARRAY',
-              items: { type: 'STRING' }
+  const res = await fetchWithRetry(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.5,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: 'OBJECT',
+            properties: {
+              question: { type: 'STRING' },
+              options: {
+                type: 'ARRAY',
+                items: { type: 'STRING' }
+              },
+              answerIndex: { type: 'INTEGER' },
+              explanation: { type: 'STRING' }
             },
-            answerIndex: { type: 'INTEGER' },
-            explanation: { type: 'STRING' }
-          },
-          required: ['question', 'options', 'answerIndex', 'explanation']
+            required: ['question', 'options', 'answerIndex', 'explanation']
+          }
         }
-      }
-    })
-  });
-
-  if (!res.ok) {
-    const e = await res.json();
-    throw new Error(e.error?.message || `Gemini error ${res.status}`);
-  }
+      })
+    }
+  );
 
   const data = await res.json();
   const raw = data.candidates?.[0]?.content?.parts?.[0]?.text;

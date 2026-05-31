@@ -1,7 +1,9 @@
 /**
  * Service to parse PDF structure and extract text, headings, and paragraph blocks.
- * Calibrates line gaps dynamically and chunks large paragraphs for ADHD focus.
+ * Calibrates line gaps dynamically, merges split paragraphs, and caps block size.
  */
+
+const MAX_MERGED_WORDS = 500;
 
 export async function extractPDF(file) {
   const pdfjsLib = window.pdfjsLib;
@@ -161,6 +163,10 @@ export async function extractPDF(file) {
         const endsWithSentencePunc = /[.!?]['"]?$/.test(mergedText);
         const startsWithLowercase = /^[a-z]/.test(nextText);
         const endsWithHyphen = /-$/.test(mergedText);
+        const currentWordCount = mergedText.split(/\s+/).length;
+
+        // Don't merge if we'd exceed the safety cap
+        if (currentWordCount >= MAX_MERGED_WORDS) break;
 
         let shouldMerge = false;
         if (endsWithHyphen) {
@@ -201,5 +207,12 @@ export async function extractPDF(file) {
   }
 
   const filtered = postProcessed.filter(b => b.type !== 'paragraph' || b.text.trim().split(' ').length >= 5);
+
+  // Check if we extracted any usable content
+  const hasContent = filtered.some(b => b.type === 'paragraph' || b.type === 'h1' || b.type === 'h2');
+  if (!hasContent) {
+    throw new Error('No readable text found. This PDF may be scanned images, password-protected, or empty.');
+  }
+
   return { blocks: filtered, title: title || 'Document' };
 }
