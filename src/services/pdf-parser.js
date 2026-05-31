@@ -62,11 +62,33 @@ export async function extractPDF(file) {
       const t = ln.text.trim();
       if (!t) continue;
 
-      // Check for paragraph break based on vertical spacing
+      // Check for paragraph break based on vertical spacing and text content
       if (j > 0 && pBuf.length) {
         const prevLn = lines[j - 1];
         const gap = Math.abs(ln.y - prevLn.y);
-        const isParaBreak = (avgGap > 0 && gap > avgGap * 1.25) || (gap > ln.fontSize * 1.5);
+        const prevText = prevLn.text.trim();
+        
+        const endsWithSentenceEnd = /[.!?]['"]?$/.test(prevText);
+        const endsWithHyphen = /-$/.test(prevText);
+        const startsWithLowercase = /^[a-z]/.test(t);
+        
+        let isParaBreak = false;
+        
+        if (endsWithHyphen) {
+          isParaBreak = false;
+        } else if (gap > ln.fontSize * 3.0) {
+          isParaBreak = true;
+        } else if (startsWithLowercase) {
+          isParaBreak = false;
+        } else if (!endsWithSentenceEnd) {
+          isParaBreak = false;
+        } else {
+          const threshold = avgGap > 0 ? avgGap * 1.35 : ln.fontSize * 1.5;
+          if (gap > threshold) {
+            isParaBreak = true;
+          }
+        }
+        
         if (isParaBreak) {
           pushParagraph(pBuf.join(' '), i);
           pBuf = [];
@@ -81,10 +103,10 @@ export async function extractPDF(file) {
       } else if (big) {
         if (pBuf.length) { pushParagraph(pBuf.join(' '), i); pBuf = []; }
         blocks.push({ type: 'h2', text: t, page: i });
-      } else if (/^\d+\.\d+\.\d+\s+\S/.test(t) && t.length < 80) {
+      } else if (/^\d+\.\d+\.\d+\s+\S/.test(t) && t.length < 80 && !/[.!?]$/.test(t)) {
         if (pBuf.length) { pushParagraph(pBuf.join(' '), i); pBuf = []; }
         blocks.push({ type: 'h3', text: t, page: i });
-      } else if (/^\d+\.\d+\s+[A-Z\u0900-\u097F]/.test(t) && t.length < 80) {
+      } else if (/^\d+\.\d+\s+[A-Z\u0900-\u097F]/.test(t) && t.length < 80 && !/[.!?]$/.test(t)) {
         if (pBuf.length) { pushParagraph(pBuf.join(' '), i); pBuf = []; }
         blocks.push({ type: 'h2', text: t, page: i });
       } else {
@@ -96,7 +118,7 @@ export async function extractPDF(file) {
   }
 
   // Post-processing to merge drop-caps and fix paragraph flow
-  const postProcessed = [];
+  const mergedDropCaps = [];
   for (let j = 0; j < blocks.length; j++) {
     const b = blocks[j];
     if ((b.type === 'h1' || b.type === 'h2' || b.type === 'h3') && b.text.trim().length === 1) {
@@ -110,7 +132,72 @@ export async function extractPDF(file) {
         continue;
       }
     }
-    postProcessed.push(b);
+    mergedDropCaps.push(b);
+  }
+
+  // Merge consecutive paragraphs that were split across pages or lines
+  const postProcessed = [];
+  for (let j = 0; j < mergedDropCaps.length; j++) {
+    const current = mergedDropCaps[j];
+    if (current.type !== 'paragraph') {
+      postProcessed.push(current);
+      continue;
+    }
+
+    let mergedText = current.text.trim();
+    let lastMergedPage = current.page;
+    let nextIdx = j + 1;
+    let pendingPagebreaks = [];
+
+    while (nextIdx < mergedDropCaps.length) {
+      const nextBlock = mergedDropCaps[nextIdx];
+      if (nextBlock.type === 'pagebreak') {
+        pendingPagebreaks.push(nextBlock);
+        nextIdx++;
+        continue;
+      }
+      if (nextBlock.type === 'paragraph') {
+        const nextText = nextBlock.text.trim();
+        const endsWithSentencePunc = /[.!?]['"]?$/.test(mergedText);
+        const startsWithLowercase = /^[a-z]/.test(nextText);
+        const endsWithHyphen = /-$/.test(mergedText);
+
+        let shouldMerge = false;
+        if (endsWithHyphen) {
+          shouldMerge = true;
+        } else if (!endsWithSentencePunc) {
+          shouldMerge = true;
+        } else if (startsWithLowercase) {
+          shouldMerge = true;
+        }
+
+        if (shouldMerge) {
+          if (endsWithHyphen) {
+            mergedText = mergedText.slice(0, -1) + nextText;
+          } else {
+            mergedText = mergedText + ' ' + nextText;
+          }
+          lastMergedPage = nextBlock.page;
+          nextIdx++;
+        } else {
+          break;
+        }
+      } else {
+        break;
+      }
+    }
+
+    postProcessed.push({
+      type: 'paragraph',
+      text: mergedText,
+      page: lastMergedPage
+    });
+
+    for (const pb of pendingPagebreaks) {
+      postProcessed.push(pb);
+    }
+
+    j = nextIdx - 1;
   }
 
   const filtered = postProcessed.filter(b => b.type !== 'paragraph' || b.text.trim().split(' ').length >= 5);
