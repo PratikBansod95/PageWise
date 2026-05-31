@@ -6,23 +6,61 @@ import { renderQuiz } from './active-recall.js';
 /**
  * Component to handle Reader UI rendering, font adjustments, paragraph toggles,
  * and page progress tracking.
+ *
+ * State is kept module-private; external code uses getter functions
+ * (getCurIdx, getAllBlocks) instead of mutable exported variables.
  */
 
-export let allBlocks = [];
-export let paragraphTexts = [];
-export let curIdx = -1;
-export let fontSize = 18;
-export let fontMode = 0; // 0: Serif, 1: Sans-Serif, 2: Dyslexic Style
+// ── Private state ──
+const _state = {
+  allBlocks: [],
+  paragraphTexts: [],
+  curIdx: -1,
+  fontSize: 18,
+  fontMode: 0, // 0: Serif, 1: Sans-Serif, 2: Dyslexic
+  scrollHandler: null,
+  apiKey: null,
+  totalParas: 0,
+  quizzesAttempted: 0,
+  quizzesCorrect: 0,
+};
 
-// Track scroll handler for cleanup
-let _scrollHandler = null;
-let _currentApiKey = null;
+// ── Public getters (safe read-only access from main.js) ──
+export function getCurIdx() { return _state.curIdx; }
+export function getAllBlocks() { return _state.allBlocks; }
+
+// Legacy compatibility — keep live-binding exports for main.js imports
+// that already destructure `allBlocks` and `curIdx` at the top level.
+export const allBlocks = _state.allBlocks;
+export const paragraphTexts = _state.paragraphTexts;
+export { getCurIdx as curIdx_getter };
+
+// Provide curIdx as a getter on the export object isn't possible with
+// ES static exports, so we keep both: the getter fn for new code, and
+// a re-exported reference that main.js already uses via live binding.
+// The trick: main.js reads `curIdx` which is a module-scoped let that
+// we keep synced to _state.curIdx in every mutation.
+let curIdx = -1; // kept in sync with _state.curIdx
+export { curIdx };
+
+function _syncCurIdx(v) {
+  _state.curIdx = v;
+  curIdx = v;
+}
+
+// ── Builder ──
 
 export function buildReader(blocks, title, fname, apiKey) {
   // Cleanup any previous reader session
   cleanupReader();
 
-  _currentApiKey = apiKey;
+  _state.apiKey = apiKey;
+  _state.allBlocks.length = 0;
+  _state.paragraphTexts.length = 0;
+  _state.quizzesAttempted = 0;
+  _state.quizzesCorrect = 0;
+  _syncCurIdx(-1);
+
   const main = document.getElementById('rMain');
   const sidebar = document.getElementById('rSidebar');
   if (!main || !sidebar) return;
@@ -30,10 +68,6 @@ export function buildReader(blocks, title, fname, apiKey) {
   document.getElementById('rDocName').textContent = fname.replace(/\.pdf$/i, '');
   main.innerHTML = '';
   sidebar.innerHTML = '<span class="sb-label">Contents</span>';
-  
-  allBlocks.length = 0;
-  paragraphTexts.length = 0;
-  curIdx = -1;
 
   const isDemo = !apiKey;
 
@@ -43,14 +77,24 @@ export function buildReader(blocks, title, fname, apiKey) {
   clabel.textContent = 'Your Focus Book';
   main.appendChild(clabel);
 
+  // Reading stats bar
+  const statsBar = document.createElement('div');
+  statsBar.className = 'reading-stats-bar fade-up';
+  statsBar.id = 'readingStats';
+  main.appendChild(statsBar);
+
   // Book page container
   const page = document.createElement('div');
   page.className = 'book-page';
+  page.setAttribute('role', 'article');
+  page.setAttribute('aria-label', title);
   main.appendChild(page);
 
   // Doc title
   const titleEl = document.createElement('div');
   titleEl.className = 'doc-title fade-up';
+  titleEl.setAttribute('role', 'heading');
+  titleEl.setAttribute('aria-level', '1');
   titleEl.textContent = title;
   page.appendChild(titleEl);
 
@@ -62,12 +106,13 @@ export function buildReader(blocks, title, fname, apiKey) {
     if (b.type === 'pagebreak') {
       const pm = document.createElement('div');
       pm.className = 'pg-turn';
+      pm.setAttribute('role', 'separator');
       pm.innerHTML = `<div class="pg-turn-line"></div><span class="pg-turn-badge">Page ${b.page}</span><div class="pg-turn-line"></div>`;
       page.appendChild(pm);
       continue;
     }
     if (b.type === 'h1') {
-      const el = document.createElement('div');
+      const el = document.createElement('h2'); // semantic heading
       el.className = 'c-h1 fade-up';
       el.id = uniqueSlug(b.text, slugCounts);
       el.textContent = b.text;
@@ -76,7 +121,7 @@ export function buildReader(blocks, title, fname, apiKey) {
       continue;
     }
     if (b.type === 'h2') {
-      const el = document.createElement('div');
+      const el = document.createElement('h3');
       el.className = 'c-h2 fade-up';
       el.id = uniqueSlug(b.text, slugCounts);
       el.textContent = b.text;
@@ -85,7 +130,7 @@ export function buildReader(blocks, title, fname, apiKey) {
       continue;
     }
     if (b.type === 'h3') {
-      const el = document.createElement('div');
+      const el = document.createElement('h4');
       el.className = 'c-h3 fade-up';
       el.id = uniqueSlug(b.text, slugCounts);
       el.textContent = b.text;
@@ -95,13 +140,17 @@ export function buildReader(blocks, title, fname, apiKey) {
     }
     if (b.type === 'paragraph') {
       const idx = pi;
-      paragraphTexts.push(b.text);
+      _state.paragraphTexts.push(b.text);
 
       const isSkip = b.summary === '__skip__';
       const div = document.createElement('div');
       div.className = 'para-block fade-up' + (isSkip ? ' skip-summary' : '');
       div.style.animationDelay = Math.min(delay * 20, 300) + 'ms';
       div.dataset.index = idx;
+      div.setAttribute('role', 'button');
+      div.setAttribute('tabindex', '0');
+      div.setAttribute('aria-label', isSkip ? 'Caption or label' : `Paragraph ${idx + 1}: ${(b.summary || '').substring(0, 60)}`);
+      div.setAttribute('aria-expanded', 'false');
 
       const sents = splitSents(b.text).map(s => `<p>${escHtml(s)}</p>`).join('');
       
@@ -113,50 +162,58 @@ export function buildReader(blocks, title, fname, apiKey) {
       let actionsHtml = '';
       if (!isSkip) {
         if (isDemo) {
-          // Demo mode: show disabled buttons with tooltip
           actionsHtml = `
             <div class="para-actions">
-              <button class="r-btn tts-btn" disabled title="Upload your own PDF to use Listen">Listen 🔊</button>
-              <button class="r-btn quiz-btn" disabled title="Upload your own PDF to use Quiz">Quiz Me 🧠</button>
+              <button class="r-btn tts-btn" disabled title="Upload your own PDF to use Listen" aria-label="Listen to paragraph (demo disabled)">Listen 🔊</button>
+              <button class="r-btn quiz-btn" disabled title="Upload your own PDF to use Quiz" aria-label="Quiz on paragraph (demo disabled)">Quiz Me 🧠</button>
             </div>`;
         } else {
           actionsHtml = `
             <div class="para-actions">
-              <button class="r-btn tts-btn">Listen 🔊</button>
-              <button class="r-btn quiz-btn">Quiz Me 🧠</button>
+              <button class="r-btn tts-btn" aria-label="Listen to paragraph ${idx + 1}">Listen 🔊</button>
+              <button class="r-btn quiz-btn" aria-label="Quiz on paragraph ${idx + 1}">Quiz Me 🧠</button>
             </div>
-            <div class="para-quiz-container" id="quiz-${idx}" style="display: none; width: 100%;"></div>`;
+            <div class="para-quiz-container" id="quiz-${idx}"></div>`;
         }
       }
 
       div.innerHTML = `
         ${summaryRowHtml}
         <div class="para-full">
-          <div class="para-full-inner" style="${isSkip ? 'border-left: none; margin-left: 0; padding: 0;' : ''}">
+          <div class="para-full-inner${isSkip ? ' skip-inner' : ''}">
             ${sents}
             ${actionsHtml}
           </div>
         </div>`;
 
-      // Bind events programmatically
-      div.addEventListener('click', (e) => {
+      // Bind click + keyboard events
+      const handleActivate = (e) => {
         if (isSkip) return;
-        if (e.target.closest('button, input, a, .quiz-opt-btn, .quiz-feedback')) {
-          return;
-        }
+        if (e.target.closest('button, input, a, .quiz-opt-btn, .quiz-feedback')) return;
         toggle(idx);
+      };
+      div.addEventListener('click', handleActivate);
+      div.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleActivate(e);
+        }
       });
+
       if (!isSkip && !isDemo) {
         div.querySelector('.tts-btn').addEventListener('click', (e) => readAloud(idx, e));
-        div.querySelector('.quiz-btn').addEventListener('click', (e) => quizMe(idx, e, _currentApiKey));
+        div.querySelector('.quiz-btn').addEventListener('click', (e) => quizMe(idx, e, _state.apiKey));
       }
 
       page.appendChild(div);
-      allBlocks.push(div);
+      _state.allBlocks.push(div);
       pi++;
       delay++;
     }
   }
+
+  _state.totalParas = pi;
+  updateReadingStats();
 
   // Page number at bottom
   const pgnum = document.createElement('div');
@@ -165,12 +222,27 @@ export function buildReader(blocks, title, fname, apiKey) {
   page.appendChild(pgnum);
 
   // Initialize Speech Synthesizer with refs
-  initSpeech(paragraphTexts, allBlocks);
+  initSpeech(_state.paragraphTexts, _state.allBlocks);
 
   // Track the scroll handler so we can remove it later
-  _scrollHandler = updateProg;
-  window.addEventListener('scroll', _scrollHandler, { passive: true });
+  _state.scrollHandler = updateProg;
+  window.addEventListener('scroll', _state.scrollHandler, { passive: true });
   updateProg();
+}
+
+/** Update the reading stats bar */
+function updateReadingStats() {
+  const el = document.getElementById('readingStats');
+  if (!el) return;
+  const read = _state.allBlocks.filter(b => b.dataset.wasRead === '1').length;
+  const total = _state.totalParas;
+  const pct = total > 0 ? Math.round((read / total) * 100) : 0;
+
+  let html = `<span class="stat-item">📖 ${read}/${total} paragraphs read (${pct}%)</span>`;
+  if (_state.quizzesAttempted > 0) {
+    html += `<span class="stat-item">🧠 ${_state.quizzesCorrect}/${_state.quizzesAttempted} quizzes correct</span>`;
+  }
+  el.innerHTML = html;
 }
 
 /** Generate a unique slug ID, appending a counter suffix on collision */
@@ -186,9 +258,9 @@ function uniqueSlug(text, counts) {
 
 /** Remove scroll listeners and cancel speech — call before rebuilding or going home */
 export function cleanupReader() {
-  if (_scrollHandler) {
-    window.removeEventListener('scroll', _scrollHandler);
-    _scrollHandler = null;
+  if (_state.scrollHandler) {
+    window.removeEventListener('scroll', _state.scrollHandler);
+    _state.scrollHandler = null;
   }
   cancelSpeech();
 }
@@ -197,18 +269,28 @@ function addSbItem(sb, text, el, cls) {
   const btn = document.createElement('button');
   btn.className = `sb-item ${cls}`;
   btn.textContent = text.length > 42 ? text.substring(0, 42) + '…' : text;
+  btn.setAttribute('aria-label', `Jump to: ${text.substring(0, 60)}`);
   btn.onclick = () => el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   sb.appendChild(btn);
 }
 
 export function toggle(idx) {
-  const b = allBlocks[idx];
+  const b = _state.allBlocks[idx];
   if (!b) return;
   const wasActive = b.classList.contains('active');
-  allBlocks.forEach(x => x.classList.remove('active'));
+
+  // Collapse all
+  _state.allBlocks.forEach(x => {
+    x.classList.remove('active');
+    x.setAttribute('aria-expanded', 'false');
+  });
+
   if (!wasActive) {
     b.classList.add('active');
-    curIdx = idx;
+    b.setAttribute('aria-expanded', 'true');
+    b.dataset.wasRead = '1';
+    _syncCurIdx(idx);
+    updateReadingStats();
     setTimeout(() => {
       const r = b.getBoundingClientRect();
       if (r.top < 64 || r.bottom > window.innerHeight - 40) {
@@ -216,20 +298,35 @@ export function toggle(idx) {
       }
     }, 60);
   } else {
-    curIdx = -1;
+    _syncCurIdx(-1);
   }
 }
 
 export function toggleByIndex(idx) {
-  if (idx >= 0 && idx < allBlocks.length) {
+  if (idx >= 0 && idx < _state.allBlocks.length) {
     toggle(idx);
   }
 }
 
 export function collapseAll() {
-  allBlocks.forEach(b => b.classList.remove('active'));
-  curIdx = -1;
+  _state.allBlocks.forEach(b => {
+    b.classList.remove('active');
+    b.setAttribute('aria-expanded', 'false');
+  });
+  _syncCurIdx(-1);
   cancelSpeech();
+}
+
+export function expandAll() {
+  _state.allBlocks.forEach(b => {
+    if (!b.classList.contains('skip-summary')) {
+      b.classList.add('active');
+      b.setAttribute('aria-expanded', 'true');
+      b.dataset.wasRead = '1';
+    }
+  });
+  _syncCurIdx(-1);
+  updateReadingStats();
 }
 
 export function updateProg() {
@@ -241,25 +338,25 @@ export function updateProg() {
 }
 
 export function chgFs(d) {
-  fontSize = Math.max(13, Math.min(26, fontSize + d));
+  _state.fontSize = Math.max(13, Math.min(26, _state.fontSize + d));
   const label = document.getElementById('fsLabel');
-  if (label) label.textContent = fontSize;
-  document.documentElement.style.setProperty('--rfs', fontSize + 'px');
+  if (label) label.textContent = _state.fontSize;
+  document.documentElement.style.setProperty('--rfs', _state.fontSize + 'px');
 }
 
 export function toggleFont() {
-  fontMode = (fontMode + 1) % 3;
+  _state.fontMode = (_state.fontMode + 1) % 3;
   const btn = document.getElementById('fontToggleBtn');
   const root = document.documentElement;
   if (!btn) return;
 
-  if (fontMode === 0) {
+  if (_state.fontMode === 0) {
     root.style.setProperty('--reading-font', "'Lora', serif");
     root.style.setProperty('--reading-letter-spacing', 'normal');
     root.style.setProperty('--reading-word-spacing', 'normal');
     root.style.setProperty('--reading-line-height', '1.9');
     btn.innerHTML = 'Serif 📖';
-  } else if (fontMode === 1) {
+  } else if (_state.fontMode === 1) {
     root.style.setProperty('--reading-font', "'DM Sans', sans-serif");
     root.style.setProperty('--reading-letter-spacing', 'normal');
     root.style.setProperty('--reading-word-spacing', 'normal');
@@ -274,6 +371,13 @@ export function toggleFont() {
   }
 }
 
+/** Track quiz result for analytics */
+export function recordQuizResult(correct) {
+  _state.quizzesAttempted++;
+  if (correct) _state.quizzesCorrect++;
+  updateReadingStats();
+}
+
 export async function quizMe(idx, e, apiKey) {
   if (e) e.stopPropagation();
   if (!apiKey) {
@@ -284,43 +388,48 @@ export async function quizMe(idx, e, apiKey) {
   const container = document.getElementById('quiz-' + idx);
   if (!container) return;
 
-  if (container.style.display === 'block') {
-    container.style.display = 'none';
+  if (container.classList.contains('quiz-visible')) {
+    container.classList.remove('quiz-visible');
     return;
   }
 
-  // Find and disable the quiz button to prevent double-clicks
-  const quizBtn = allBlocks[idx]?.querySelector('.quiz-btn');
+  // Disable the quiz button during the API call
+  const quizBtn = _state.allBlocks[idx]?.querySelector('.quiz-btn');
   if (quizBtn) {
     quizBtn.disabled = true;
     quizBtn.textContent = 'Loading…';
   }
 
-  container.style.display = 'block';
+  container.classList.add('quiz-visible');
   container.innerHTML = `
-    <div class="q-box" style="border-left: 3px solid var(--gold); margin: 12px 0 0 0; background: var(--paper);">
+    <div class="q-box q-box-loading">
       <div class="q-label">AI Tutor</div>
-      <p style="font-family: 'Lora', serif; font-size: 13px; font-style: italic; color: var(--ink3);">Drafting a recall question...</p>
+      <p class="q-loading-text">Drafting a recall question...</p>
     </div>
   `;
 
   try {
-    const text = paragraphTexts[idx];
+    const text = _state.paragraphTexts[idx];
     const quiz = await generateQuizQuestion(text, apiKey);
     renderQuiz(idx, container, quiz);
   } catch (err) {
     console.error(err);
     container.innerHTML = `
       <div class="q-box quiz-error-box">
-        <div class="q-label" style="color: var(--danger-text);">Error</div>
-        <p style="font-size: 12.5px;">Failed to generate quiz question. Check your API key and network connection.</p>
+        <div class="q-label">Error</div>
+        <p class="q-error-text">Failed to generate quiz question. Check your API key and network connection.</p>
       </div>
     `;
   } finally {
-    // Re-enable the quiz button
     if (quizBtn) {
       quizBtn.disabled = false;
       quizBtn.textContent = 'Quiz Me 🧠';
     }
   }
+}
+
+/** Toggle the mobile sidebar overlay */
+export function toggleSidebar() {
+  const sidebar = document.getElementById('rSidebar');
+  if (sidebar) sidebar.classList.toggle('sidebar-open');
 }

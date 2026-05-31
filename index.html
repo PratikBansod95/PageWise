@@ -237,12 +237,15 @@
        READER
   ═══════════════════════════════════════ -->
   <div id="reader">
-    <div class="r-bar">
+    <div class="r-bar" role="toolbar" aria-label="Reader controls">
+      <button class="r-bar-sidebar-toggle" onclick="toggleSidebar()" aria-label="Toggle table of contents">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
       <div class="r-bar-logo">Page<em>wise</em></div>
       <div class="r-bar-sep"></div>
       <div class="r-bar-docname" id="rDocName">—</div>
       <div class="r-bar-actions">
-        <button class="theme-toggle-btn" onclick="toggleTheme()" aria-label="Toggle theme" style="margin-right: 6px;">
+        <button class="theme-toggle-btn" onclick="toggleTheme()" aria-label="Toggle light/dark theme">
           <svg class="sun-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="5"></circle>
             <line x1="12" y1="1" x2="12" y2="3"></line>
@@ -258,17 +261,21 @@
             <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
           </svg>
         </button>
-        <button class="r-btn" id="fontToggleBtn" onclick="toggleFont()" style="min-width: 90px; justify-content: center;">Serif 📖</button>
-        <div class="fs-ctrl">
-          <button onclick="chgFs(-1)">A−</button>
+        <button class="r-btn" id="fontToggleBtn" onclick="toggleFont()" aria-label="Change reading font">Serif 📖</button>
+        <div class="fs-ctrl" role="group" aria-label="Font size">
+          <button onclick="chgFs(-1)" aria-label="Decrease font size">A−</button>
           <span id="fsLabel">18</span>
-          <button onclick="chgFs(1)">A+</button>
+          <button onclick="chgFs(1)" aria-label="Increase font size">A+</button>
         </div>
-        <button class="r-btn" onclick="collapseAll()">
+        <button class="r-btn" onclick="expandAll()" aria-label="Expand all paragraphs">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 7l4-4 4 4"/></svg>
+          Expand
+        </button>
+        <button class="r-btn" onclick="collapseAll()" aria-label="Collapse all paragraphs">
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 3l4 4 4-4"/></svg>
           Collapse
         </button>
-        <button class="r-btn" onclick="goHome()">
+        <button class="r-btn" onclick="goHome()" aria-label="Upload a new document">
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M1 5l4-4 4 4M2 4.5V9h2V7h2v2h2V4.5"/></svg>
           New doc
         </button>

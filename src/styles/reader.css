@@ -33,6 +33,7 @@
   transition:all 0.15s;
 }
 .r-btn:hover{border-color:var(--gold);color:var(--gold);}
+#fontToggleBtn{min-width:90px;justify-content:center;}
 .fs-ctrl{
   display:flex;align-items:center;gap:4px;
   border:1px solid var(--rule);border-radius:8px;padding:4px 8px;
@@ -44,6 +45,16 @@
 }
 .fs-ctrl button:hover{color:var(--gold);}
 .fs-ctrl span{font-size:11px;color:var(--ink3);min-width:22px;text-align:center;}
+
+/* Mobile sidebar toggle (hamburger) — hidden on desktop */
+.r-bar-sidebar-toggle{
+  display:none;
+  background:none;border:1px solid var(--rule);border-radius:8px;
+  padding:4px 8px;color:var(--ink3);cursor:pointer;
+  transition:all 0.15s;flex-shrink:0;
+}
+.r-bar-sidebar-toggle:hover{border-color:var(--gold);color:var(--gold);}
+
 /* Reading progress */
 .r-progress{
   position:absolute;bottom:0;left:0;height:2px;
@@ -57,9 +68,26 @@
   max-width:1140px;margin:0 auto;
   min-height:calc(100vh - 52px);
 }
+
+/* ── Mobile breakpoint ── */
 @media(max-width:760px){
   .r-layout{grid-template-columns:1fr;}
-  .r-sidebar{display:none;}
+  .r-bar-sidebar-toggle{display:flex;align-items:center;justify-content:center;}
+  .r-bar-sep{display:none;}
+  .r-bar-logo{font-size:15px;}
+  .r-bar-actions .r-btn span,
+  .r-bar-actions .r-btn svg + *:not(svg){display:none;}
+  .r-sidebar{
+    display:none;
+    position:fixed;top:52px;left:0;bottom:0;
+    width:260px;z-index:300;
+    background:var(--paper);
+    border-right:1px solid var(--rule);
+    box-shadow:var(--shadow-lg);
+    animation:slideIn 0.25s ease both;
+  }
+  .r-sidebar.sidebar-open{display:block;}
+  @keyframes slideIn{from{transform:translateX(-100%)}to{transform:translateX(0)}}
   .r-main{padding:24px 16px;}
 }
 
@@ -96,6 +124,21 @@
 .r-main{
   padding:40px 32px 80px;
   display:flex;flex-direction:column;align-items:center;
+}
+
+/* Reading stats bar */
+.reading-stats-bar{
+  width:100%;max-width:680px;
+  display:flex;flex-wrap:wrap;gap:16px;
+  padding:8px 16px;margin-bottom:12px;
+  font-family:'DM Sans',sans-serif;font-size:12px;
+  color:var(--ink3);
+}
+.stat-item{
+  display:inline-flex;align-items:center;gap:4px;
+  background:var(--paper);border:1px solid var(--rule);
+  border-radius:20px;padding:4px 12px;
+  font-size:11px;font-weight:500;
 }
 
 /* The actual book page container */
@@ -162,7 +205,7 @@
   width:60px;height:2px;background:var(--gold);
 }
 
-/* Section headings in content */
+/* Section headings in content — using semantic h2/h3/h4 */
 .c-h1{
   font-family:'Playfair Display',serif;
   font-size:22px;font-weight:700;color:var(--ink);
@@ -199,9 +242,13 @@
   transition:all 0.25s ease;
   border-left:3px solid transparent;
   cursor:pointer;
+  outline:none;
 }
 .para-block:hover{
   background:var(--gold-soft);
+}
+.para-block:focus-visible{
+  box-shadow:0 0 0 2px var(--gold);
 }
 .para-block.active:hover{
   background:linear-gradient(135deg,var(--paper),var(--paper2));
@@ -216,10 +263,6 @@
   max-height:100px;
   opacity:1;
   overflow:hidden;
-}
-
-.para-chev{
-  display:none;
 }
 
 .para-sum-text{
@@ -244,6 +287,12 @@
   margin-left:8px;
   margin-bottom:4px;
   border-radius:0 0 0 4px;
+}
+/* Skip-summary inner — no decorative border */
+.para-full-inner.skip-inner{
+  border-left:none;
+  margin-left:0;
+  padding:0;
 }
 .para-full-inner p{
   font-family:var(--reading-font);
@@ -295,23 +344,35 @@
   transform: scale(0.995);
 }
 
-/* Skip Summary paragraphs (captions, short tags, labels) styling */
+/* Skip Summary paragraphs (captions, short tags, labels) styling.
+   These are always-expanded, non-interactive, and use high specificity
+   intentionally to override the interactive .para-block base styles. */
 .para-block.skip-summary {
-  cursor: default !important;
-  border-left-color: transparent !important;
-  box-shadow: none !important;
-  background: none !important;
+  cursor: default;
+  border-left-color: transparent;
+  box-shadow: none;
+  background: none;
   margin-bottom: 24px;
+  pointer-events: none;
 }
 .para-block.skip-summary .para-full {
-  max-height: none !important;
-  opacity: 1 !important;
+  max-height: none;
+  opacity: 1;
 }
 .para-block.skip-summary:hover {
-  background: none !important;
+  background: none;
 }
 .r-main:has(.para-block.active) .para-block.skip-summary {
   opacity: 0.85;
   filter: none;
   transform: none;
+}
+
+/* Quiz container — hidden by default, shown via class */
+.para-quiz-container{
+  display:none;
+  width:100%;
+}
+.para-quiz-container.quiz-visible{
+  display:block;
 }

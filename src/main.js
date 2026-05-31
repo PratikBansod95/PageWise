@@ -1,6 +1,6 @@
 import { extractPDF } from './services/pdf-parser.js';
 import { generateParagraphSummaries } from './services/gemini-api.js';
-import { buildReader, cleanupReader, collapseAll, chgFs, toggleFont, toggleByIndex, allBlocks, curIdx } from './components/reader-ui.js';
+import { buildReader, cleanupReader, collapseAll, expandAll, chgFs, toggleFont, toggleByIndex, toggleSidebar, allBlocks, curIdx } from './components/reader-ui.js';
 import { showToast } from './utils.js';
 import { cancelSpeech } from './components/speech-reader.js';
 
@@ -14,6 +14,7 @@ window.saveKey = saveKey;
 window.handleFile = handleFile;
 window.chgFs = chgFs;
 window.collapseAll = collapseAll;
+window.expandAll = expandAll;
 window.toggleFont = toggleFont;
 window.goHome = goHome;
 window.scrollToWorkspace = scrollToWorkspace;
@@ -21,6 +22,7 @@ window.switchHeroTab = switchHeroTab;
 window.clickMockPara = clickMockPara;
 window.loadDemoDoc = loadDemoDoc;
 window.toggleTheme = toggleTheme;
+window.toggleSidebar = toggleSidebar;
 
 document.addEventListener('DOMContentLoaded', () => {
   const savedTheme = localStorage.getItem('theme');

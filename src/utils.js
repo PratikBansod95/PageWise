@@ -6,11 +6,25 @@ export function slug(t) {
   return t.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').substring(0, 40);
 }
 
+/**
+ * Split text into displayable sentence groups, avoiding breaks on
+ * common abbreviations like Dr., Mr., Mrs., Fig., e.g., i.e., etc.
+ */
 export function splitSents(t) {
-  const r = t.split(/(?<=[.!?])\s+/);
+  // Replace known abbreviation periods with a placeholder
+  const ABBR_PLACEHOLDER = '\u200B'; // zero-width space
+  const abbrs = /\b(Dr|Mr|Mrs|Ms|Prof|Sr|Jr|St|Fig|fig|Vol|vol|No|no|vs|etc|al|approx|dept|est|govt|inc|corp|ltd|co|assn|e\.g|i\.e|cf|viz)\./gi;
+  const safe = t.replace(abbrs, (match) => match.slice(0, -1) + ABBR_PLACEHOLDER);
+
+  // Split on actual sentence-ending punctuation followed by space
+  const r = safe.split(/(?<=[.!?]['"]?)\s+/);
+
+  // Restore placeholders
+  const restored = r.map(s => s.replace(new RegExp(ABBR_PLACEHOLDER, 'g'), '.'));
+
   const out = [];
   let buf = '';
-  for (const s of r) {
+  for (const s of restored) {
     buf += (buf ? ' ' : '') + s;
     if (buf.length > 130) {
       out.push(buf);
@@ -29,12 +43,28 @@ export function escHtml(t) {
     .replace(/"/g, '&quot;');
 }
 
+let _toastTimer = null;
+
+/**
+ * Show a toast notification. Debounced — rapid calls replace the
+ * previous toast and reset the timer instead of stacking.
+ */
 export function showToast(msg, type = '') {
   const t = document.getElementById('toast');
   if (!t) return;
+
+  // Clear any pending hide timer
+  if (_toastTimer) {
+    clearTimeout(_toastTimer);
+    _toastTimer = null;
+  }
+
   t.textContent = msg;
   t.className = 'toast' + (type ? ' ' + type : '') + ' show';
-  setTimeout(() => t.classList.remove('show'), 3500);
+  _toastTimer = setTimeout(() => {
+    t.classList.remove('show');
+    _toastTimer = null;
+  }, 3500);
 }
 
 // Bind to window for backwards compatibility if needed, or inline use

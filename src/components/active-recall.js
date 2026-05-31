@@ -1,4 +1,5 @@
 import { escHtml } from '../utils.js';
+import { recordQuizResult } from './reader-ui.js';
 
 /**
  * Component to handle Active Recall comprehension quizzes.
@@ -10,11 +11,11 @@ export function renderQuiz(idx, container, quiz) {
   container.dataset.explanation = quiz.explanation;
 
   container.innerHTML = `
-    <div class="q-box" style="border-left: 3px solid var(--gold); margin: 12px 0 0 0; background: var(--paper);">
+    <div class="q-box q-box-quiz">
       <div class="q-label">Recall Quiz</div>
-      <p style="font-family: 'Lora', serif; font-size: 13.5px; font-weight: 500; color: var(--ink); margin-bottom: 12px;">${escHtml(quiz.question)}</p>
-      <div class="quiz-options"></div>
-      <div class="quiz-feedback" style="display: none; margin-top: 12px; font-size: 12.5px; line-height: 1.5; font-family: var(--reading-font);"></div>
+      <p class="q-question">${escHtml(quiz.question)}</p>
+      <div class="quiz-options" role="group" aria-label="Answer options"></div>
+      <div class="quiz-feedback" role="alert" aria-live="polite"></div>
     </div>
   `;
 
@@ -23,6 +24,7 @@ export function renderQuiz(idx, container, quiz) {
     const btn = document.createElement('button');
     btn.className = 'quiz-opt-btn';
     btn.textContent = opt;
+    btn.setAttribute('aria-label', `Option ${oidx + 1}: ${opt}`);
     btn.addEventListener('click', () => submitAnswer(idx, oidx, container));
     optionsContainer.appendChild(btn);
   });
@@ -31,6 +33,10 @@ export function renderQuiz(idx, container, quiz) {
 export function submitAnswer(idx, oidx, container) {
   const correctIdx = parseInt(container.dataset.answer);
   const explanation = container.dataset.explanation;
+  const isCorrect = oidx === correctIdx;
+
+  // Track analytics
+  recordQuizResult(isCorrect);
 
   const buttons = container.querySelectorAll('.quiz-opt-btn');
   buttons.forEach((btn, bidx) => {
@@ -45,12 +51,12 @@ export function submitAnswer(idx, oidx, container) {
   });
 
   const feedback = container.querySelector('.quiz-feedback');
-  feedback.style.display = 'block';
-  if (oidx === correctIdx) {
-    feedback.className = 'quiz-feedback correct';
+  feedback.classList.add('feedback-visible');
+  if (isCorrect) {
+    feedback.className = 'quiz-feedback feedback-visible correct';
     feedback.innerHTML = `<strong>Correct! 🎉</strong> ${escHtml(explanation)}`;
   } else {
-    feedback.className = 'quiz-feedback incorrect';
+    feedback.className = 'quiz-feedback feedback-visible incorrect';
     feedback.innerHTML = `<strong>Incorrect ❌</strong> ${escHtml(explanation)}`;
   }
 }
