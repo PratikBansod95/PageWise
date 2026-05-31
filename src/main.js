@@ -16,6 +16,10 @@ window.chgFs = chgFs;
 window.collapseAll = collapseAll;
 window.toggleFont = toggleFont;
 window.goHome = goHome;
+window.scrollToWorkspace = scrollToWorkspace;
+window.switchHeroTab = switchHeroTab;
+window.clickMockPara = clickMockPara;
+window.loadDemoDoc = loadDemoDoc;
 
 document.addEventListener('DOMContentLoaded', () => {
   if (apiKey) {
@@ -134,4 +138,57 @@ export function goHome() {
   if (reader) reader.classList.remove('loaded');
   
   cancelSpeech();
+}
+
+export function scrollToWorkspace() {
+  const ws = document.getElementById('workspaceSection');
+  if (ws) {
+    ws.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+export function switchHeroTab(tab) {
+  const uploadBtn = document.getElementById('tabUploadBtn');
+  const demoBtn = document.getElementById('tabDemoBtn');
+  const uploadContent = document.getElementById('tabContentUpload');
+  const demoContent = document.getElementById('tabContentDemo');
+  
+  if (tab === 'upload') {
+    uploadBtn?.classList.add('active');
+    demoBtn?.classList.remove('active');
+    uploadContent?.classList.add('active');
+    demoContent?.classList.remove('active');
+  } else {
+    demoBtn?.classList.add('active');
+    uploadBtn?.classList.remove('active');
+    demoContent?.classList.add('active');
+    uploadContent?.classList.remove('active');
+  }
+}
+
+export function clickMockPara(el) {
+  const blocks = document.querySelectorAll('.mock-para-block');
+  const isActive = el.classList.contains('active');
+  blocks.forEach(b => b.classList.remove('active'));
+  if (!isActive) {
+    el.classList.add('active');
+  }
+}
+
+const DEMO_BLOCKS = [
+  { type: 'h1', text: 'The Biology of Learning: Synaptic Plasticity' },
+  { type: 'pagebreak', page: 1 },
+  { type: 'h2', text: '1. What Happens in the Brain When You Study?' },
+  { type: 'paragraph', text: 'Every time you learn something new, your brain physically changes. This is due to a phenomenon called synaptic plasticity, which is the ability of connections between neurons—called synapses—to strengthen or weaken over time in response to increases or decreases in their activity. When you review material, you repeatedly fire the same neural pathways, making those connections more efficient.', summary: '✦ Your brain rewires itself physically and strengthens connections when studying new concepts.' },
+  { type: 'paragraph', text: 'In the mid-20th century, neuroscientist Donald Hebb famously summarized this process: "neurons that fire together, wire together." This means that when two neurons are activated at the same time, the synapse between them undergoes chemical changes that make it easier for them to communicate in the future. This form of synaptic enhancement is known as Long-Term Potentiation (LTP).', summary: '✦ Neurons firing together strengthen synapses chemically via Long-Term Potentiation.' },
+  { type: 'h2', text: '2. The Myth of Multitasking' },
+  { type: 'paragraph', text: 'Many students believe they can study effectively while listening to music, watching videos, or messaging friends. However, cognitive psychology shows that the human brain cannot focus on two complex tasks simultaneously. Instead, the brain rapidly switches back and forth between tasks. This switching incurs a "cognitive switch cost," which depletes your mental energy, slows down your learning speed, and increases the rate of errors.', summary: '✦ Multitasking triggers rapid cognitive switching, draining mental energy and causing errors.' },
+  { type: 'paragraph', text: 'To achieve deep learning, you must enter a state of "Flow"—a psychological term coined by Mihaly Csikszentmihalyi. Flow is a state of deep absorption and focus where a person is fully immersed in their current activity. In this state, distractions are naturally filtered out, time seems to warp, and the efficiency of synaptic plasticity increases dramatically because of focused neurotransmitter release.', summary: '✦ Entering a state of flow filters out distractions and increases study efficiency.' },
+];
+
+export function loadDemoDoc() {
+  show('reader');
+  buildReader(DEMO_BLOCKS, 'The Biology of Learning: Synaptic Plasticity', 'biology_of_learning_demo.pdf', 'demo-key');
+  document.getElementById('reader')?.classList.add('loaded');
+  showToast('Loaded demo document ✓', 'ok');
 }

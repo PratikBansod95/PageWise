@@ -36,103 +36,121 @@
       <span class="nav-tag">Free Beta</span>
     </nav>
 
-    <section class="hero">
-      <!-- Floating book -->
-      <div class="book-showcase">
-        <div class="sparkle"></div>
-        <div class="sparkle"></div>
-        <div class="sparkle"></div>
-        <div class="sparkle"></div>
-        <div class="book-3d">
-          <div class="book-spine"></div>
-          <div class="book-cover">
-            <div class="book-cover-title">Your PDF,<br>Transformed</div>
-            <div class="book-cover-line"></div>
-            <div class="book-cover-sub">Focus Edition</div>
+    <section class="hero-container">
+      <div class="hero-left">
+        <div class="hero-eyebrow">
+          <span class="eyebrow-dot"></span>
+          AI-powered focus reading
+        </div>
+        <h1 class="hero-h1">Turn any PDF into a<br><span>magical book</span></h1>
+        <p class="hero-desc">
+          Upload any textbook, paper, or lecture notes. Pagewise uses AI to create story-like summary threads that guide you, fading distractions away so you read <strong>one paragraph at a time</strong>. Perfect for students and ADHD minds.
+        </p>
+
+        <div class="hero-actions">
+          <button class="cta-primary-btn" onclick="scrollToWorkspace()">Start Reading ✦</button>
+          <button class="cta-secondary-btn" onclick="loadDemoDoc()">Try Demo Book 📖</button>
+        </div>
+
+        <div class="hero-features-list">
+          <div class="feat-badge">
+            <span class="badge-icon">◎</span>
+            <span class="badge-text">Fish-eye focus</span>
           </div>
-          <div class="book-pages"></div>
-        </div>
-      </div>
-
-      <div class="hero-eyebrow">
-        <span class="eyebrow-dot"></span>
-        AI-powered focus reading
-      </div>
-
-      <h1 class="hero-h1">Turn any PDF into<br>a <em>magical book</em></h1>
-      <h2 class="hero-h2">that you'll actually finish reading</h2>
-
-      <p class="hero-desc">
-        Upload any textbook, paper, or notes. Pagewise transforms it into a beautiful
-        focus-reading experience — <strong>one paragraph at a time</strong>, with AI summaries
-        for everything else. Designed for <strong>ADHD minds</strong> and everyone who
-        wants to read deeper.
-      </p>
-
-      <!-- Before / After -->
-      <div class="transform-preview">
-        <div class="preview-card">
-          <div class="preview-card-label before">Boring PDF</div>
-          <div class="preview-line" style="width:90%"></div>
-          <div class="preview-line" style="width:100%"></div>
-          <div class="preview-line" style="width:75%"></div>
-          <div class="preview-line" style="width:95%"></div>
-          <div class="preview-line" style="width:85%"></div>
-          <div class="preview-line" style="width:60%"></div>
-          <div class="preview-line" style="width:90%"></div>
-        </div>
-        <div class="preview-arrow">✦</div>
-        <div class="preview-card">
-          <div class="preview-card-label after">Pagewise Book</div>
-          <div class="preview-line active">
-            <span>Living things maintain order through constant molecular movement — the very definition of life.</span>
+          <div class="feat-badge">
+            <span class="badge-icon">✦</span>
+            <span class="badge-text">AI summaries</span>
           </div>
-          <div class="preview-line" style="width:100%;opacity:0.4"></div>
-          <div class="preview-line" style="width:90%;opacity:0.4"></div>
-          <div class="preview-line" style="width:80%;opacity:0.4"></div>
-        </div>
-      </div>
-
-      <!-- Input card -->
-      <div class="input-card">
-        <span class="field-label">Your Gemini API Key</span>
-        <div class="key-row">
-          <input type="password" class="key-input" id="apiKeyInput"
-            placeholder="AIzaSy… (free from Google AI Studio)" autocomplete="off">
-          <button class="key-btn" onclick="saveKey()">Save</button>
-        </div>
-        <div class="key-note">
-          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="5"/><path d="M6 5.5v3M6 4h.01"/></svg>
-          Stored only in this browser tab.
-          <a href="https://aistudio.google.com/app/apikey" target="_blank">Get a free key →</a>
-        </div>
-        <div class="divider">
-          <div class="divider-line"></div>
-          <span class="divider-text">then drop your PDF</span>
-          <div class="divider-line"></div>
-        </div>
-        <div class="upload-zone" id="uploadZone">
-          <input type="file" id="fileInput" accept=".pdf" onchange="handleFile(event)">
-          <div class="upload-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="12" y1="18" x2="12" y2="12"/>
-              <polyline points="9 15 12 12 15 15"/>
-            </svg>
+          <div class="feat-badge">
+            <span class="badge-icon">🧠</span>
+            <span class="badge-text">Active recall quizzes</span>
           </div>
-          <div class="upload-title">Drop your PDF here</div>
-          <div class="upload-sub">Textbooks, papers, notes — any digital PDF</div>
+          <div class="feat-badge">
+            <span class="badge-icon">🔊</span>
+            <span class="badge-text">Text to speech</span>
+          </div>
         </div>
       </div>
 
-      <!-- Feature strip -->
-      <div class="features-strip">
-        <div class="feat"><div class="feat-icon">◎</div><div class="feat-text">Fish-eye focus</div></div>
-        <div class="feat"><div class="feat-icon">✦</div><div class="feat-text">AI summaries</div></div>
-        <div class="feat"><div class="feat-icon">🖼</div><div class="feat-text">Images intact</div></div>
-        <div class="feat"><div class="feat-icon">⌨</div><div class="feat-text">Keyboard nav</div></div>
-        <div class="feat"><div class="feat-icon">🔒</div><div class="feat-text">100% private</div></div>
+      <div class="hero-right" id="workspaceSection">
+        <div class="workspace-card">
+          <div class="workspace-tabs">
+            <button class="w-tab active" id="tabUploadBtn" onclick="switchHeroTab('upload')">Workspace</button>
+            <button class="w-tab" id="tabDemoBtn" onclick="switchHeroTab('demo')">How It Works (Live)</button>
+          </div>
+
+          <!-- Tab Content 1: Upload Workspace -->
+          <div class="w-tab-content active" id="tabContentUpload">
+            <span class="field-label">Your Gemini API Key</span>
+            <div class="key-row">
+              <input type="password" class="key-input" id="apiKeyInput"
+                placeholder="AIzaSy… (free from Google AI Studio)" autocomplete="off">
+              <button class="key-btn" onclick="saveKey()">Save Key</button>
+            </div>
+            <div class="key-note">
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="5"/><path d="M6 5.5v3M6 4h.01"/></svg>
+              Saved locally in this browser.
+              <a href="https://aistudio.google.com/app/apikey" target="_blank">Get a free key →</a>
+            </div>
+
+            <div class="divider">
+              <div class="divider-line"></div>
+              <span class="divider-text">then drop your PDF</span>
+              <div class="divider-line"></div>
+            </div>
+
+            <div class="upload-zone" id="uploadZone">
+              <input type="file" id="fileInput" accept=".pdf" onchange="handleFile(event)">
+              <div class="upload-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="12" y1="18" x2="12" y2="12"/>
+                  <polyline points="9 15 12 12 15 15"/>
+                </svg>
+              </div>
+              <div class="upload-title">Drop your PDF here</div>
+              <div class="upload-sub">or click to browse from files</div>
+            </div>
+          </div>
+
+          <!-- Tab Content 2: Live Mock Reader -->
+          <div class="w-tab-content" id="tabContentDemo">
+            <div class="mock-reader-frame">
+              <div class="mock-header">
+                <div class="mock-dots">
+                  <span class="m-dot"></span>
+                  <span class="m-dot"></span>
+                  <span class="m-dot"></span>
+                </div>
+                <span class="mock-title">Interactive Preview</span>
+              </div>
+              <div class="mock-body">
+                <div class="mock-para-block active" onclick="clickMockPara(this)">
+                  <div class="mock-para-summary">✦ Neurons firing together strengthen synapses, forming long-term memories.</div>
+                  <div class="mock-para-full">
+                    When you study new concepts, the synapses between your neurons undergo chemical changes. Donald Hebb famously summarized this biological mechanism: "neurons that fire together, wire together," forming the cellular foundation of learning.
+                  </div>
+                </div>
+                <div class="mock-para-block" onclick="clickMockPara(this)">
+                  <div class="mock-para-summary">✦ Multitasking triggers rapid cognitive switching, draining mental focus.</div>
+                  <div class="mock-para-full">
+                    Cognitive psychology shows that the human brain cannot focus on two complex tasks at once. Instead, it switches back and forth, incurring a "cognitive switch cost" that drains mental energy, increases errors, and slows retention.
+                  </div>
+                </div>
+                <div class="mock-para-block" onclick="clickMockPara(this)">
+                  <div class="mock-para-summary">✦ Entering flow state accelerates synaptic plasticity and filters distractions.</div>
+                  <div class="mock-para-full">
+                    Flow is a state of deep absorption and concentration where external distractions are naturally filtered out. In this state, the efficiency of neural changes increases due to targeted neurotransmitter release in the brain.
+                  </div>
+                </div>
+              </div>
+              <div class="mock-footer">
+                <span>💡 Click any summary line to test the focus expansion</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
