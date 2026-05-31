@@ -7,7 +7,7 @@
 .r-bar{
   position:sticky;top:0;z-index:200;
   height:52px;
-  background:rgba(249,246,239,0.95);
+  background:var(--paper);
   backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
   border-bottom:1px solid var(--rule);
   display:flex;align-items:center;
@@ -101,11 +101,11 @@
 /* The actual book page container */
 .book-page{
   width:100%;max-width:680px;
-  background:white;
+  background:var(--paper);
   border-radius:4px 16px 16px 4px;
   box-shadow:
-    -4px 0 0 #E8E0CE,
-    -8px 0 0 #F0E8D8,
+    -4px 0 0 var(--paper2),
+    -8px 0 0 var(--paper3),
     var(--shadow-lg);
   padding:56px 64px;
   position:relative;
@@ -254,9 +254,9 @@
 
 /* ACTIVE STATE — the expanded paragraph */
 .para-block.active{
-  background:linear-gradient(135deg,#FFFDF7,#FFFAEF);
+  background:linear-gradient(135deg,var(--paper),var(--paper2));
   border-left-color:var(--gold);
-  box-shadow:0 2px 12px rgba(196,146,42,0.08),0 0 0 1px rgba(196,146,42,0.15);
+  box-shadow:0 4px 16px var(--gold-glow);
 }
 .para-block.active .para-summary-row{
   max-height:0;

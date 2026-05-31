@@ -1,26 +1,26 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 
 :root{
-  /* PAPER THEME — warm cream reading surface */
-  --paper:        #F9F6EF;
-  --paper2:       #F2EDE2;
-  --paper3:       #EAE3D4;
-  --ink:          #1C1812;
-  --ink2:         #3D3629;
-  --ink3:         #7A7060;
-  --ink4:         #B0A898;
-  --rule:         #DDD6C8;
-  --gold:         #C4922A;
-  --gold2:        #E8B84B;
-  --gold-soft:    rgba(196,146,42,0.12);
-  --gold-glow:    rgba(196,146,42,0.25);
-  --blue:         #2A4480;
-  --accent:       #C4922A;
-  --shadow-sm:    0 1px 4px rgba(28,24,18,0.08);
-  --shadow-md:    0 4px 20px rgba(28,24,18,0.10);
-  --shadow-lg:    0 12px 48px rgba(28,24,18,0.14);
-  --shadow-book:  6px 6px 24px rgba(28,24,18,0.18), 1px 1px 0 rgba(28,24,18,0.08);
-  --r:            10px;
+  /* MODERN LIGHT MODE — Slate & Indigo */
+  --paper:        #FFFFFF;      /* Clean white card backgrounds */
+  --paper2:       #F8FAFC;      /* Soft cool slate body background */
+  --paper3:       #E2E8F0;      /* Muted gray elements */
+  --ink:          #0F172A;      /* Deep slate primary text */
+  --ink2:         #334155;      /* Cool slate secondary text */
+  --ink3:         #64748B;      /* Slate muted description text */
+  --ink4:         #94A3B8;      /* Borders/highly muted text */
+  --rule:         #E2E8F0;      /* Clean gray line dividers */
+  --gold:         #6366F1;      /* Modern Indigo accent */
+  --gold2:        #8B5CF6;      /* Vibrant Violet accent */
+  --gold-soft:    rgba(99, 102, 241, 0.08);
+  --gold-glow:    rgba(99, 102, 241, 0.2);
+  --blue:         #3B82F6;
+  --accent:       #6366F1;
+  --shadow-sm:    0 1px 3px rgba(15, 23, 42, 0.05);
+  --shadow-md:    0 4px 12px rgba(15, 23, 42, 0.05);
+  --shadow-lg:    0 10px 30px rgba(15, 23, 42, 0.08);
+  --shadow-book:  8px 8px 30px rgba(15, 23, 42, 0.1), 1px 1px 0 rgba(15, 23, 42, 0.05);
+  --r:            12px;
 
   /* READER FONT SIZE */
   --rfs: 18px;
@@ -32,6 +32,28 @@
   --reading-line-height: 1.9;
 }
 
+body.dark-mode {
+  /* PREMIUM DARK MODE — Charcoal & Electric Violet */
+  --paper:        #1E293B;      /* Deep slate-blue card background */
+  --paper2:       #0F172A;      /* Midnight black-blue body background */
+  --paper3:       #334155;      /* Slate elements */
+  --ink:          #F8FAFC;      /* Pure slate-white primary text */
+  --ink2:         #E2E8F0;      /* Muted slate-white secondary text */
+  --ink3:         #94A3B8;      /* Cool slate gray description text */
+  --ink4:         #475569;      /* Borders/highly muted text */
+  --rule:         #334155;      /* Dark gray line dividers */
+  --gold:         #8B5CF6;      /* Electric Violet accent */
+  --gold2:        #A78BFA;      /* Lavender highlight */
+  --gold-soft:    rgba(139, 92, 246, 0.15);
+  --gold-glow:    rgba(139, 92, 246, 0.3);
+  --blue:         #60A5FA;
+  --accent:       #8B5CF6;
+  --shadow-sm:    0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md:    0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg:    0 10px 32px rgba(0, 0, 0, 0.5);
+  --shadow-book:  8px 8px 30px rgba(0, 0, 0, 0.6);
+}
+
 html{scroll-behavior:smooth}
 body{
   background:var(--paper2);
@@ -39,6 +61,29 @@ body{
   font-family:'DM Sans',sans-serif;
   min-height:100vh;
   overflow-x:hidden;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* Theme Toggle Button Style */
+.theme-toggle-btn {
+  background: none;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink3);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.theme-toggle-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: var(--paper);
+  transform: scale(1.05);
 }
 
 /* ══════════════════════════════════════
@@ -46,18 +91,19 @@ body{
 ══════════════════════════════════════ */
 #landing{ min-height:100vh; display:flex; flex-direction:column; }
 
-/* Ambient background — warm paper gradient with subtle texture */
+/* Ambient background — modern cool gradients */
 .land-bg{
   position:fixed; inset:0; z-index:0; pointer-events:none;
   background:
-    radial-gradient(ellipse 80% 60% at 70% 20%, rgba(196,146,42,0.08) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 80% at 20% 80%, rgba(196,146,42,0.05) 0%, transparent 60%),
-    linear-gradient(160deg, #F9F6EF 0%, #F2EDE2 50%, #EDE5D4 100%);
+    radial-gradient(ellipse 80% 60% at 70% 20%, rgba(99, 102, 241, 0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 80% at 20% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 60%),
+    linear-gradient(160deg, var(--paper) 0%, var(--paper2) 50%, var(--paper3) 100%);
 }
-/* Paper grain texture via SVG */
+/* Subtle grid line overlay instead of raw noise for a cleaner look */
 .land-bg::after{
-  content:'';position:absolute;inset:0;opacity:0.35;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.15'/%3E%3C/svg%3E");
+  content:'';position:absolute;inset:0;opacity:0.02;
+  background-image: linear-gradient(var(--ink) 1px, transparent 1px), linear-gradient(90deg, var(--ink) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 /* NAV */

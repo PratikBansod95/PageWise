@@ -65,7 +65,7 @@
 
 /* Activity box */
 .act-box{
-  background:linear-gradient(135deg,#FFFDF7,#FFF8E8);
+  background:linear-gradient(135deg,var(--paper),var(--paper2));
   border:1px solid var(--gold-glow);border-radius:8px;
   padding:14px 18px;margin:14px 0;
 }
@@ -87,7 +87,7 @@
 /* Keyboard shortcut hint */
 .kbd-hint{
   position:fixed;bottom:24px;right:24px;
-  background:white;border:1px solid var(--rule);
+  background:var(--paper);border:1px solid var(--rule);
   border-radius:10px;padding:10px 14px;
   font-size:11px;color:var(--ink3);
   box-shadow:var(--shadow-md);line-height:1.9;
@@ -104,7 +104,7 @@ kbd{
 .toast{
   position:fixed;bottom:24px;left:50%;
   transform:translateX(-50%) translateY(80px);
-  background:white;border:1px solid var(--rule);
+  background:var(--paper);border:1px solid var(--rule);
   color:var(--ink2);
   padding:12px 20px;border-radius:10px;
   font-size:13px;z-index:9999;

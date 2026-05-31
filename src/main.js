@@ -20,8 +20,15 @@ window.scrollToWorkspace = scrollToWorkspace;
 window.switchHeroTab = switchHeroTab;
 window.clickMockPara = clickMockPara;
 window.loadDemoDoc = loadDemoDoc;
+window.toggleTheme = toggleTheme;
 
 document.addEventListener('DOMContentLoaded', () => {
+  const savedTheme = localStorage.getItem('theme');
+  if (savedTheme === 'dark') {
+    document.body.classList.add('dark-mode');
+  }
+  updateThemeIcons();
+
   if (apiKey) {
     const input = document.getElementById('apiKeyInput');
     if (input) input.value = apiKey;
@@ -191,4 +198,25 @@ export function loadDemoDoc() {
   buildReader(DEMO_BLOCKS, 'The Biology of Learning: Synaptic Plasticity', 'biology_of_learning_demo.pdf', 'demo-key');
   document.getElementById('reader')?.classList.add('loaded');
   showToast('Loaded demo document ✓', 'ok');
+}
+
+export function toggleTheme() {
+  const isDark = document.body.classList.toggle('dark-mode');
+  localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  updateThemeIcons();
+}
+
+export function updateThemeIcons() {
+  const isDark = document.body.classList.contains('dark-mode');
+  document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
+    const sun = btn.querySelector('.sun-icon');
+    const moon = btn.querySelector('.moon-icon');
+    if (isDark) {
+      if (sun) sun.style.display = 'none';
+      if (moon) moon.style.display = 'block';
+    } else {
+      if (sun) sun.style.display = 'block';
+      if (moon) moon.style.display = 'none';
+    }
+  });
 }
