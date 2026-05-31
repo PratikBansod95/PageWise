@@ -208,7 +208,25 @@ export async function extractPDF(file) {
     j = nextIdx - 1;
   }
 
-  const filtered = postProcessed.filter(b => b.type !== 'paragraph' || b.text.trim().split(' ').length >= 5);
+  const filtered = postProcessed.filter(b => {
+    if (b.type !== 'paragraph') return true;
+    const text = b.text.trim();
+    
+    // Raise minimum paragraph length from 5 to 8 words
+    if (text.split(/\s+/).length < 8) return false;
+    
+    // Filter out page numbers (pure digits)
+    if (/^\d+$/.test(text)) return false;
+    
+    // Filter out NCERT rationalize/reprint footers
+    if (/rationalised/i.test(text) && /\d{4}-\d{2,4}/.test(text)) return false;
+    if (/reprint/i.test(text) && /\d{4}-\d{2,4}/.test(text)) return false;
+    
+    // Filter out short figure and activity headers (e.g., "Figure 5.3", "Activity 5.1") under 15 words
+    if (/^(figure|fig\.|activity)\s+\d+\.\d+/i.test(text) && text.split(/\s+/).length < 15) return false;
+    
+    return true;
+  });
 
   // Check if we extracted any usable content
   const hasContent = filtered.some(b => b.type === 'paragraph' || b.type === 'h1' || b.type === 'h2');

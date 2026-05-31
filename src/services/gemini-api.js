@@ -148,6 +148,7 @@ ${batch.map((p, idx) => `[Paragraph ${idx + 1}] ${p.text}`).join('\n\n')}`;
 
     const data = await res.json();
     const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+    console.log(`Gemini batch ${batchNum} raw:`, raw);
 
     // Robust extraction of JSON array
     let jsonText = raw.trim();
@@ -166,7 +167,7 @@ ${batch.map((p, idx) => `[Paragraph ${idx + 1}] ${p.text}`).join('\n\n')}`;
             map[targetPara.id] = summary;
           } else {
             // Fallback for this individual paragraph
-            map[targetPara.id] = targetPara.text.split(' ').slice(0, 12).join(' ') + '…';
+            map[targetPara.id] = 'Click to read…';
           }
         });
       } else {
@@ -175,7 +176,7 @@ ${batch.map((p, idx) => `[Paragraph ${idx + 1}] ${p.text}`).join('\n\n')}`;
     } catch (e) {
       console.error("Gemini summary JSON parse error:", e, "Raw response:", raw);
       batch.forEach(p => {
-        map[p.id] = p.text.split(' ').slice(0, 12).join(' ') + '…';
+        map[p.id] = 'Click to read…';
       });
     }
   }
@@ -183,7 +184,7 @@ ${batch.map((p, idx) => `[Paragraph ${idx + 1}] ${p.text}`).join('\n\n')}`;
   let pj = 0;
   return blocks.map(b => {
     if (b.type === 'paragraph') {
-      const r = { ...b, summary: map[pj] || b.text.split(' ').slice(0, 12).join(' ') + '…' };
+      const r = { ...b, summary: map[pj] || 'Click to read…' };
       pj++;
       return r;
     }
