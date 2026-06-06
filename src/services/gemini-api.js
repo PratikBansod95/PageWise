@@ -219,12 +219,15 @@ function extractJsonGroups(raw) {
   text = text.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
 
   // Try direct parse first
-  if (text.startsWith('[')) {
-    try {
-      const parsed = JSON.parse(text);
-      if (Array.isArray(parsed)) return parsed;
-    } catch {}
-  }
+  try {
+    const parsed = JSON.parse(text);
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && typeof parsed === 'object') {
+      for (const val of Object.values(parsed)) {
+        if (Array.isArray(val)) return val;
+      }
+    }
+  } catch {}
 
   // Find first [ ... ] span
   const start = text.indexOf('[');
@@ -233,6 +236,18 @@ function extractJsonGroups(raw) {
     try {
       const parsed = JSON.parse(text.substring(start, end + 1));
       if (Array.isArray(parsed)) return parsed;
+    } catch {}
+  }
+
+  // Find first { ... } span and check inside for an array
+  const braceStart = text.indexOf('{');
+  const braceEnd   = text.lastIndexOf('}');
+  if (braceStart !== -1 && braceEnd > braceStart) {
+    try {
+      const parsed = JSON.parse(text.substring(braceStart, braceEnd + 1));
+      for (const val of Object.values(parsed)) {
+        if (Array.isArray(val)) return val;
+      }
     } catch {}
   }
 
@@ -246,10 +261,31 @@ function reconstructGroups(batch, parsedGroups, blocks) {
 
   if (Array.isArray(parsedGroups)) {
     parsedGroups.forEach((group, gIdx) => {
-      if (!group || typeof group !== 'object') return;
-      const summary = typeof group.summary === 'string' ? group.summary.trim() : '';
-      const indices = group.paragraphIndices;
-      if (Array.isArray(indices) && summary) {
+      if (!group) return;
+
+      // Handle flat array of strings if model ignores object structure
+      if (typeof group === 'string') {
+        const pIdx = gIdx;
+        if (pIdx < N) {
+          paragraphAssignments[pIdx] = {
+            summary: group.trim(),
+            groupId: gIdx
+          };
+        }
+        return;
+      }
+
+      if (typeof group !== 'object') return;
+
+      // Robust check for different key name variants
+      const summary = (group.summary || group.summary_text || group.text || '').trim();
+      let indices = group.paragraphIndices || group.paragraph_indices || group.indices || group.paragraphs;
+      if (indices === undefined) return;
+      if (!Array.isArray(indices)) {
+        indices = [indices];
+      }
+
+      if (summary && indices) {
         indices.forEach(idx => {
           const val = parseInt(idx);
           if (!isNaN(val) && val >= 1 && val <= N) {
