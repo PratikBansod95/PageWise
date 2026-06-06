@@ -219,7 +219,6 @@ export async function extractPDF(file) {
       flush(prev?.page || ln.page);
       blocks.push({ type: ln.type, text: ln.text, page: ln.page });
       prev = ln;
-      dropCapPending = '';
       continue;
     }
 
@@ -229,6 +228,7 @@ export async function extractPDF(file) {
       lineText = dropCapPending + lineText;
       dropCapPending = '';
     }
+    lineText = stripBulletArtifacts(lineText);
 
     // Decide: continue current paragraph or start a new one?
     let startNew = false;
@@ -236,7 +236,6 @@ export async function extractPDF(file) {
       const prevText       = prev.text;
       const endsSentence   = /[.!?]['"]?\s*$/.test(prevText);
       const endsHyphen     = /-\s*$/.test(prevText);
-      const startsLower    = /^[a-z(]/.test(lineText);
       const startsCap      = /^[A-Z"']/.test(lineText);
       const vertGap        = prev.page === ln.page ? (prev.y - ln.y) : 999;
       const bigGap         = vertGap > ln.medianGap * 1.6;
@@ -246,16 +245,11 @@ export async function extractPDF(file) {
         // De-hyphenate
         textBuf = textBuf.replace(/-\s*$/, '');
         startNew = false;
-      } else if (startsLower) {
-        startNew = false; // definitely continuation
-      } else if (!endsSentence) {
-        startNew = false; // mid-sentence wrap
-      } else if (endsSentence && bigGap && startsCap && bufWords >= 20) {
+      } else if (endsSentence && bigGap && startsCap && bufWords >= 15) {
         startNew = true;  // clean paragraph break
-      } else if (endsSentence && bufWords >= 80) {
-        startNew = true;  // paragraph is already long enough
+      } else {
+        startNew = false; // keep buffering
       }
-      // All other cases: keep buffering
     }
 
     if (startNew) {
@@ -291,18 +285,36 @@ export async function extractPDF(file) {
  * Works by finding the shortest repeating unit.
  */
 function dedupeRepeatedText(text) {
-  const words = text.trim().split(/\s+/);
-  if (words.length <= 4) return text;
+  const trimmed = text.trim();
+  if (!trimmed) return text;
 
-  // Try chunk sizes from 1 to half the word count
-  for (let chunkSize = 1; chunkSize <= Math.floor(words.length / 2); chunkSize++) {
-    const chunk = words.slice(0, chunkSize).join(' ');
-    const rest  = words.slice(chunkSize).join(' ');
-    // Check if rest is just repetitions of chunk
-    const pattern = new RegExp('^(' + chunk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*)+$', 'i');
-    if (pattern.test(rest)) return chunk;
+  // Try unspaced repetition: "NUTRITIONNUTRITION"
+  const doubleUnspaced = trimmed + trimmed;
+  const repeatUnspacedIdx = doubleUnspaced.indexOf(trimmed, 1);
+  if (repeatUnspacedIdx !== -1 && repeatUnspacedIdx < trimmed.length) {
+    const candidate = doubleUnspaced.substring(0, repeatUnspacedIdx).trim();
+    if (candidate.length > 2) return candidate;
   }
+
+  // Try spaced repetition: "NUTRITION NUTRITION"
+  const doubleSpaced = trimmed + ' ' + trimmed;
+  const repeatSpacedIdx = doubleSpaced.indexOf(trimmed, 1);
+  if (repeatSpacedIdx !== -1 && repeatSpacedIdx < trimmed.length + 1) {
+    const candidate = doubleSpaced.substring(0, repeatSpacedIdx).trim();
+    if (candidate.length > 2) return candidate;
+  }
+
   return text;
+}
+
+/**
+ * Strip NCERT custom bullet font artifacts (letter 'n' rendered as bullet).
+ */
+function stripBulletArtifacts(text) {
+  return text
+    .replace(/^n\s+/, '')
+    .replace(/\s+n\s+/g, ' ')
+    .trim();
 }
 
 /**
