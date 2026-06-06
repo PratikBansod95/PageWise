@@ -50,16 +50,15 @@ export async function generateParagraphSummaries(blocks, title, key, onProgress)
 
   const docType = guessDocType(title);
 
-  // Build array of {id, text, section} for paragraphs only
+  // Build array of {id, text, section, originalBlockIndex, page} for paragraphs only
   const paras = [];
   let currentSection = 'Introduction';
-  let pi = 0;
-  for (const b of blocks) {
+  for (let idx = 0; idx < blocks.length; idx++) {
+    const b = blocks[idx];
     if (b.type === 'h1' || b.type === 'h2' || b.type === 'h3') {
       currentSection = b.text;
     } else if (b.type === 'paragraph') {
-      paras.push({ id: pi, text: b.text, section: currentSection });
-      pi++;
+      paras.push({ id: paras.length, text: b.text, section: currentSection, originalBlockIndex: idx, page: b.page });
     }
   }
 
@@ -67,7 +66,7 @@ export async function generateParagraphSummaries(blocks, title, key, onProgress)
 
   const BATCH = 20;
   const totalBatches = Math.ceil(paras.length / BATCH);
-  const summaryMap = {}; // id → summary string
+  const allGroups = []; // list of all reconstructed focus groups
 
   for (let start = 0; start < paras.length; start += BATCH) {
     const batch       = paras.slice(start, start + BATCH);
@@ -77,7 +76,8 @@ export async function generateParagraphSummaries(blocks, title, key, onProgress)
     if (onProgress) onProgress(3, { current: batchNum, total: totalBatches });
 
     // Rolling context: last 3 summaries for narrative continuity
-    const prevSummaries = Object.values(summaryMap)
+    const prevSummaries = allGroups
+      .map(g => g.summary)
       .filter(s => s && s !== '__skip__')
       .slice(-3);
     const contextLine = prevSummaries.length
@@ -95,7 +95,7 @@ export async function generateParagraphSummaries(blocks, title, key, onProgress)
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature:     0.2,
-            maxOutputTokens: Math.max(1024, batch.length * 80),
+            maxOutputTokens: Math.max(1024, batch.length * 120),
           }
         })
       });
@@ -104,91 +104,113 @@ export async function generateParagraphSummaries(blocks, title, key, onProgress)
       raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       console.log(`Batch ${batchNum}/${totalBatches} raw (first 200):`, raw.substring(0, 200));
 
-      const parsed = extractJsonArray(raw);
+      const parsed = extractJsonGroups(raw);
 
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // Handle both [{id, summary}] and ["summary1", "summary2"] formats
-        if (typeof parsed[0] === 'string') {
-          batch.forEach((p, idx) => {
-            const s = parsed[idx];
-            if (s && s !== '__skip__') summaryMap[p.id] = s;
-          });
-        } else {
-          parsed.forEach(item => {
-            if (item.summary && item.summary !== '__skip__') {
-              summaryMap[item.id] = item.summary;
-            }
-          });
-        }
-        console.log(`Batch ${batchNum}: mapped ${Object.keys(summaryMap).length} summaries total`);
+      if (parsed) {
+        const groups = reconstructGroups(batch, parsed, blocks);
+        allGroups.push(...groups);
+        console.log(`Batch ${batchNum}: generated ${groups.length} focus groups`);
       } else {
-        throw new Error('No valid JSON array in response');
+        throw new Error('No valid JSON array of groups in response');
       }
 
     } catch (err) {
       console.error(`Batch ${batchNum} failed:`, err.message, '\nRaw:', raw.substring(0, 300));
-      // Fallback: extract summaries line-by-line, or use first sentence
+      // Fallback: each paragraph in this batch gets its own group
       batch.forEach(p => {
-        if (!summaryMap[p.id]) {
-          const firstSent = p.text.match(/^[^.!?]+[.!?]/)?.[0] || p.text.substring(0, 80);
-          summaryMap[p.id] = firstSent.trim();
-        }
+        allGroups.push({
+          groupId: -1 - p.id,
+          summary: firstSentence(p.text),
+          paragraphs: [p.text],
+          paragraphIds: [p.id],
+          page: p.page || 1
+        });
       });
     }
   }
 
-  // Inject summaries back into blocks
-  let pj = 0;
-  return blocks.map(b => {
-    if (b.type === 'paragraph') {
-      const summary = summaryMap[pj] || firstSentence(b.text);
-      pj++;
-      return { ...b, summary };
+  // Reconstruct final blocks array preserving outline order
+  const finalBlocks = [];
+  const blockReplaceMap = {};
+  const blocksToRemove = new Set();
+
+  allGroups.forEach(g => {
+    const origIndices = g.paragraphIds.map(pid => paras[pid].originalBlockIndex);
+    const targetIdx = origIndices[0];
+
+    blockReplaceMap[targetIdx] = {
+      type: 'paragraph',
+      text: g.paragraphs.join('\n\n'),
+      paragraphs: g.paragraphs,
+      summary: g.summary,
+      page: g.page
+    };
+
+    for (let k = 1; k < origIndices.length; k++) {
+      blocksToRemove.add(origIndices[k]);
     }
-    return b;
   });
+
+  for (let idx = 0; idx < blocks.length; idx++) {
+    if (blocksToRemove.has(idx)) {
+      continue;
+    }
+    if (blockReplaceMap[idx] !== undefined) {
+      finalBlocks.push(blockReplaceMap[idx]);
+    } else {
+      finalBlocks.push(blocks[idx]);
+    }
+  }
+
+  return finalBlocks;
 }
 
 // ── Prompt builder ──
 function buildPrompt(title, docType, section, contextLine, batch) {
   return `You are an expert tutor helping students — including those with ADHD — study "${title}" (${docType}) using a focus-reading interface.
 
-The user sees ONLY the summary line until they click to expand the paragraph. Your summary must:
+The user sees ONLY a summary line until they click to expand a block of paragraphs.
+Your task is to group the consecutive paragraphs below into logical "focus blocks" (each containing one or more consecutive paragraphs that cover the same core concept or sub-topic) and write a single, high-quality summary for each focus block.
+
+Guidelines for summaries:
 - Be a SHORT, CLEAR sentence of 10–18 words that captures the core concept.
 - Name the KEY CONCEPT or KEY TERM introduced (do NOT hide it in vague language).
 - Read as a natural continuation of the story/document so far (narrative flow).
-- Use ACTIVE voice and plain English — no jargon unless it IS the key term.
+- Use ACTIVE voice and plain English.
 - BE A TRIGGER, NOT A SPOILER: Give enough to recognize the idea and want to click — not so much that clicking feels unnecessary.
 - NEVER start with: "This paragraph", "The author", "Here we see", "It explains", "We learn".
+
+Guidelines for grouping:
+- Group ONLY consecutive paragraphs that belong to the same sub-topic or narrative thread.
+- A focus block can contain 1, 2, or at most 3 paragraphs. Do not group more than 3 paragraphs together.
+- Every paragraph in the list must be assigned to exactly one focus block.
+- Use 1-based paragraph indices (e.g. 1, 2, 3...) to refer to the paragraphs in the input list below.
+
+SPECIAL CASES:
+- If a paragraph is a figure caption, activity instruction, label, question list, or garbled/unreadable text → assign it to its own focus block and use "__skip__" as its summary.
+
+Return ONLY a JSON array of objects, with no markdown, backticks, or other explanation before or after the JSON.
+Format:
+[
+  {
+    "summary": "Summary of paragraph 1 and 2.",
+    "paragraphIndices": [1, 2]
+  },
+  {
+    "summary": "Summary of paragraph 3.",
+    "paragraphIndices": [3]
+  }
+]
 
 SECTION: "${section}"
 ${contextLine}
 
-GOOD examples:
-• "Photosynthesis converts sunlight, CO₂, and water into glucose through four chemical steps."
-• "ATP stores cellular energy as a chemical bond — broken to power every cell activity."
-• "Lactic acid builds up when muscles run short on oxygen, causing cramps."
-• "Stomata open and close via guard cells, balancing CO₂ intake against water loss."
-
-BAD examples (do NOT do these):
-• "The paragraph discusses an important process in biology." (too vague, no key term)
-• "This section explains what happens during photosynthesis." (meta-opener)
-• "How organisms get their energy is discussed." (passive, no key term)
-
-SPECIAL CASES:
-- If the paragraph is a figure caption, activity instruction, label, or question list → return "__skip__"
-- If the paragraph is garbled/unreadable (symbols or OCR artifacts only) → return "__skip__"
-
-Return ONLY a JSON array of strings — one summary per paragraph, in the exact order of the input list.
-Do NOT include markdown, backticks, or any explanation before or after the JSON.
-Format: ["summary for paragraph 1", "summary for paragraph 2", ...]
-
-PARAGRAPHS:
-${batch.map((p, i) => `[${i + 1}] ${p.text.substring(0, 600)}`).join('\n\n')}`;
+PARAGRAPHS TO GROUP AND SUMMARIZE:
+${batch.map((p, i) => `[Paragraph ${i + 1}] ${p.text}`).join('\n\n')}`;
 }
 
-// ── Extract JSON array from raw Gemini response ──
-function extractJsonArray(raw) {
+// ── Extract JSON array of groups from raw Gemini response ──
+function extractJsonGroups(raw) {
   if (!raw) return null;
 
   let text = raw.trim();
@@ -198,26 +220,127 @@ function extractJsonArray(raw) {
 
   // Try direct parse first
   if (text.startsWith('[')) {
-    try { return JSON.parse(text); } catch {}
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {}
   }
 
   // Find first [ ... ] span
   const start = text.indexOf('[');
   const end   = text.lastIndexOf(']');
   if (start !== -1 && end > start) {
-    try { return JSON.parse(text.substring(start, end + 1)); } catch {}
+    try {
+      const parsed = JSON.parse(text.substring(start, end + 1));
+      if (Array.isArray(parsed)) return parsed;
+    } catch {}
   }
-
-  // Line-by-line fallback: extract quoted strings
-  const lines  = text.split('\n');
-  const result = [];
-  for (const line of lines) {
-    const m = line.match(/^\s*"([^"]+)"/);
-    if (m) result.push(m[1]);
-  }
-  if (result.length > 0) return result;
 
   return null;
+}
+
+// ── Heuristically group paragraphs consecutively, guarding headings and skips ──
+function reconstructGroups(batch, parsedGroups, blocks) {
+  const N = batch.length;
+  const paragraphAssignments = Array(N).fill(null);
+
+  if (Array.isArray(parsedGroups)) {
+    parsedGroups.forEach((group, gIdx) => {
+      if (!group || typeof group !== 'object') return;
+      const summary = typeof group.summary === 'string' ? group.summary.trim() : '';
+      const indices = group.paragraphIndices;
+      if (Array.isArray(indices) && summary) {
+        indices.forEach(idx => {
+          const val = parseInt(idx);
+          if (!isNaN(val) && val >= 1 && val <= N) {
+            const pIdx = val - 1;
+            // Only assign if not already claimed
+            if (paragraphAssignments[pIdx] === null) {
+              paragraphAssignments[pIdx] = {
+                summary: summary,
+                groupId: gIdx
+              };
+            }
+          }
+        });
+      }
+    });
+  }
+
+  // Construct final grouped blocks
+  const groups = [];
+  let currentGroup = null;
+
+  for (let i = 0; i < N; i++) {
+    const p = batch[i];
+    const assign = paragraphAssignments[i];
+
+    if (assign && assign.summary !== '__skip__') {
+      // Check if we can merge with the currentGroup:
+      // Must have same groupId, same summary, and NO heading between their original blocks.
+      let canMerge = currentGroup && 
+                     currentGroup.groupId === assign.groupId && 
+                     currentGroup.summary === assign.summary;
+      
+      if (canMerge && currentGroup.paragraphIds.length > 0) {
+        const lastParaId = currentGroup.paragraphIds[currentGroup.paragraphIds.length - 1];
+        const prevBlockIdx = batch.find(bp => bp.id === lastParaId)?.originalBlockIndex;
+        const currBlockIdx = p.originalBlockIndex;
+        if (prevBlockIdx !== undefined && currBlockIdx !== undefined) {
+          if (hasHeadingBetween(blocks, prevBlockIdx, currBlockIdx)) {
+            canMerge = false;
+          }
+        }
+      }
+
+      if (canMerge) {
+        currentGroup.paragraphs.push(p.text);
+        currentGroup.paragraphIds.push(p.id);
+      } else {
+        if (currentGroup) groups.push(currentGroup);
+        currentGroup = {
+          groupId: assign.groupId,
+          summary: assign.summary,
+          paragraphs: [p.text],
+          paragraphIds: [p.id],
+          page: p.page || 1
+        };
+      }
+    } else {
+      // Unmapped paragraph or skipped block
+      if (currentGroup) {
+        groups.push(currentGroup);
+        currentGroup = null;
+      }
+      // Each unmapped/skipped paragraph becomes its own group
+      const summary = (assign && assign.summary === '__skip__') ? '__skip__' : firstSentence(p.text);
+      groups.push({
+        groupId: -1 - p.id,
+        summary: summary,
+        paragraphs: [p.text],
+        paragraphIds: [p.id],
+        page: p.page || 1
+      });
+    }
+  }
+  if (currentGroup) {
+    groups.push(currentGroup);
+  }
+
+  return groups;
+}
+
+// ── Check if there are any section headings between two block indexes ──
+function hasHeadingBetween(blocks, idxA, idxB) {
+  const start = Math.min(idxA, idxB);
+  const end = Math.max(idxA, idxB);
+  for (let i = start + 1; i < end; i++) {
+    const type = blocks[i]?.type;
+    if (type === 'h1' || type === 'h2' || type === 'h3') {
+      return true;
+    }
+  }
+  return false;
 }
 
 // ── First meaningful sentence of a paragraph (fallback summary) ──

@@ -340,6 +340,15 @@
   margin-bottom:16px;
 }
 .para-full-inner p:last-child{margin-bottom:0;}
+.para-sub-block {
+  margin-bottom: 24px;
+}
+.para-sub-block:last-child {
+  margin-bottom: 0;
+}
+.para-sub-block p:last-child {
+  margin-bottom: 0;
+}
 
 /* ACTIVE STATE — the expanded paragraph */
 .para-block.active{

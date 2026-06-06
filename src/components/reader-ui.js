@@ -152,7 +152,15 @@ export function buildReader(blocks, title, fname, apiKey) {
       div.setAttribute('aria-label', isSkip ? 'Caption or label' : `Paragraph ${idx + 1}: ${(b.summary || '').substring(0, 60)}`);
       div.setAttribute('aria-expanded', 'false');
 
-      const sents = splitSents(b.text).map(s => `<p>${escHtml(s)}</p>`).join('');
+      let paragraphsHtml = '';
+      if (b.paragraphs && Array.isArray(b.paragraphs)) {
+        paragraphsHtml = b.paragraphs.map(pText => {
+          const sents = splitSents(pText).map(s => `<p>${escHtml(s)}</p>`).join('');
+          return `<div class="para-sub-block">${sents}</div>`;
+        }).join('');
+      } else {
+        paragraphsHtml = splitSents(b.text).map(s => `<p>${escHtml(s)}</p>`).join('');
+      }
       
       const summaryRowHtml = isSkip ? '' : `
         <div class="para-summary-row">
@@ -181,7 +189,7 @@ export function buildReader(blocks, title, fname, apiKey) {
         ${summaryRowHtml}
         <div class="para-full">
           <div class="para-full-inner${isSkip ? ' skip-inner' : ''}">
-            ${sents}
+            ${paragraphsHtml}
             ${actionsHtml}
           </div>
         </div>`;
