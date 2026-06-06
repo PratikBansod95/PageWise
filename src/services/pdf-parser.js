@@ -96,16 +96,59 @@ export async function extractPDF(file) {
     gaps.sort((a, b) => a - b);
     const medianGap = gaps[Math.floor(gaps.length / 2)] || 12;
 
+    // Find min and max Y for this page's lines to determine visual borders
+    let pageMinY = Infinity;
+    let pageMaxY = -Infinity;
+    for (const ln of lines) {
+      if (ln.text) {
+        if (ln.y < pageMinY) pageMinY = ln.y;
+        if (ln.y > pageMaxY) pageMaxY = ln.y;
+      }
+    }
+    const pageHeight = pageMaxY - pageMinY;
+
     for (const ln of lines) {
       ln.bodyFs    = bodyFs;
       ln.medianGap = medianGap;
+      ln.isHeaderZone = false;
+      ln.isFooterZone = false;
+
+      if (lines.length >= 3 && pageHeight > 50) {
+        const distFromTop = pageMaxY - ln.y;
+        const distFromBottom = ln.y - pageMinY;
+        // Top 8% is header zone, bottom 8% is footer zone
+        ln.isHeaderZone = distFromTop < pageHeight * 0.08;
+        ln.isFooterZone = distFromBottom < pageHeight * 0.08;
+      }
     }
 
     allLines.push(...lines);
     allLines.push({ type: 'pagebreak', page: pageNum }); // sentinel
   }
 
-  // ── 6. Classify each line ──
+  // ── 6. Identify repeating running headers/footers across pages ──
+  const headerFooterFreq = {}; // normalizedText -> Set of pageNumbers
+  for (const ln of allLines) {
+    if (ln.type === 'pagebreak') continue;
+    if (ln.isHeaderZone || ln.isFooterZone) {
+      const norm = normalizeHeaderFooterText(ln.text);
+      if (!norm) continue;
+      if (!headerFooterFreq[norm]) {
+        headerFooterFreq[norm] = new Set();
+      }
+      headerFooterFreq[norm].add(ln.page);
+    }
+  }
+
+  const runningHeaderFooters = new Set();
+  for (const [norm, pages] of Object.entries(headerFooterFreq)) {
+    // If a text appears in header/footer zone on 2 or more different pages, it's a running header/footer
+    if (pages.size >= 2) {
+      runningHeaderFooters.add(norm);
+    }
+  }
+
+  // ── 7. Classify each line ──
   const classified = [];
   for (const ln of allLines) {
     if (ln.type === 'pagebreak') { classified.push(ln); continue; }
@@ -116,8 +159,14 @@ export async function extractPDF(file) {
     // Skip tiny footers/page numbers
     if (ln.maxFs <= 9 && text.split(' ').length <= 5) continue;
     if (/^\d{1,3}$/.test(text)) continue;
-    if (/^(Science|Life Processes|Physics|Chemistry|Biology|Reprint \d{4}[-–]\d{2,4})$/i.test(text)) continue;
-    if (/^Q\s*U\s*E\s*S\s*T\s*I\s*O\s*N\s*S$/i.test(text)) continue; // spaced-out "QUESTIONS"
+
+    // Filter out running headers and footers detected generically
+    if (ln.isHeaderZone || ln.isFooterZone) {
+      const norm = normalizeHeaderFooterText(text);
+      if (runningHeaderFooters.has(norm)) {
+        continue;
+      }
+    }
 
     // Deduplicate repeated heading text: "5.2 NUTRITION 5.2 NUTRITION 5.2 NUTRITION"
     const cleanText = dedupeRepeatedText(text);
@@ -254,6 +303,16 @@ function dedupeRepeatedText(text) {
     if (pattern.test(rest)) return chunk;
   }
   return text;
+}
+
+/**
+ * Normalize text to detect generic repeating header/footer patterns
+ */
+function normalizeHeaderFooterText(text) {
+  return text.toLowerCase()
+    .replace(/\d+/g, '#')       // Replace numbers with '#'
+    .replace(/\s+/g, ' ')       // Normalize spaces
+    .trim();
 }
 
 /**
