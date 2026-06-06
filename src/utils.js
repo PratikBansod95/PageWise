@@ -69,3 +69,28 @@ export function showToast(msg, type = '') {
 
 // Bind to window for backwards compatibility if needed, or inline use
 window.showToast = showToast;
+
+/**
+ * Formats a text block with bionic reading styling (bolding word prefixes).
+ */
+export function formatBionic(text) {
+  if (!text) return '';
+  return text.split(/\s+/).map(word => {
+    if (word.length <= 1) return word;
+    
+    // Check if the alphabetical part exists
+    const match = word.match(/^([^a-zA-Z0-9]*)(.*?)([^a-zA-Z0-9]*)$/);
+    if (!match) return word;
+    const prefix = match[1];
+    const core = match[2];
+    const suffix = match[3];
+    
+    if (core.length <= 1) return word;
+    
+    const coreBoldLen = Math.ceil(core.length * 0.4) || 1;
+    const boldPart = core.substring(0, coreBoldLen);
+    const regularPart = core.substring(coreBoldLen);
+    
+    return `${prefix}<b>${boldPart}</b>${regularPart}${suffix}`;
+  }).join(' ');
+}

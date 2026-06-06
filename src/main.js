@@ -1,6 +1,6 @@
 import { extractPDF } from './services/pdf-parser.js';
 import { generateParagraphSummaries } from './services/gemini-api.js';
-import { buildReader, cleanupReader, collapseAll, expandAll, chgFs, toggleFont, toggleByIndex, toggleSidebar, allBlocks, curIdx } from './components/reader-ui.js';
+import { buildReader, cleanupReader, collapseAll, expandAll, chgFs, toggleFont, toggleByIndex, toggleSidebar, allBlocks, curIdx, toggleBionic, togglePaged } from './components/reader-ui.js';
 import { showToast } from './utils.js';
 import { cancelSpeech } from './components/speech-reader.js';
 
@@ -16,6 +16,8 @@ window.chgFs = chgFs;
 window.collapseAll = collapseAll;
 window.expandAll = expandAll;
 window.toggleFont = toggleFont;
+window.toggleBionic = toggleBionic;
+window.togglePaged = togglePaged;
 window.goHome = goHome;
 window.scrollToWorkspace = scrollToWorkspace;
 window.switchHeroTab = switchHeroTab;

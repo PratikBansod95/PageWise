@@ -421,3 +421,26 @@
 .para-quiz-container.quiz-visible{
   display:block;
 }
+
+/* Paged Mode Layout overrides */
+.book-page.paged-mode {
+  min-height: auto;
+}
+.book-page.paged-mode .para-block:not(.active) {
+  display: none !important;
+}
+.book-page.paged-mode .c-h1:not(.active-section),
+.book-page.paged-mode .c-h2:not(.active-section),
+.book-page.paged-mode .c-h3:not(.active-section),
+.book-page.paged-mode .pg-turn {
+  display: none !important;
+}
+
+/* Bionic bold anchor highlights */
+.para-full-inner b {
+  font-weight: 700;
+  color: var(--ink);
+}
+body.dark-mode .para-full-inner b {
+  color: #FFFFFF;
+}

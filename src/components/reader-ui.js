@@ -1,4 +1,4 @@
-import { slug, splitSents, escHtml, showToast } from '../utils.js';
+import { slug, splitSents, escHtml, showToast, formatBionic } from '../utils.js';
 import { initSpeech, readAloud, cancelSpeech } from './speech-reader.js';
 import { generateQuizQuestion } from '../services/gemini-api.js';
 import { renderQuiz } from './active-recall.js';
@@ -15,9 +15,13 @@ import { renderQuiz } from './active-recall.js';
 const _state = {
   allBlocks: [],
   paragraphTexts: [],
+  allBlocksRaw: [],
+  title: '',
   curIdx: -1,
   fontSize: 18,
   fontMode: 0, // 0: Serif, 1: Sans-Serif, 2: Dyslexic
+  bionicMode: false,
+  pagedMode: false,
   scrollHandler: null,
   apiKey: null,
   totalParas: 0,
@@ -57,6 +61,10 @@ export function buildReader(blocks, title, fname, apiKey) {
   _state.apiKey = apiKey;
   _state.allBlocks.length = 0;
   _state.paragraphTexts.length = 0;
+  _state.allBlocksRaw = blocks;
+  _state.title = title;
+  _state.bionicMode = false;
+  _state.pagedMode = false;
   _state.quizzesAttempted = 0;
   _state.quizzesCorrect = 0;
   _syncCurIdx(-1);
@@ -236,6 +244,19 @@ export function buildReader(blocks, title, fname, apiKey) {
   _state.scrollHandler = updateProg;
   window.addEventListener('scroll', _state.scrollHandler, { passive: true });
   updateProg();
+
+  // Auto-resume progress dialog
+  const savedIdx = localStorage.getItem('z_progress_' + title);
+  if (savedIdx !== null && parseInt(savedIdx) !== -1) {
+    const resumeIdx = parseInt(savedIdx);
+    if (resumeIdx >= 0 && resumeIdx < _state.allBlocks.length) {
+      setTimeout(() => {
+        if (confirm(`Resume reading where you left off (paragraph ${resumeIdx + 1})?`)) {
+          toggle(resumeIdx);
+        }
+      }, 500);
+    }
+  }
 }
 
 /** Update the reading stats bar */
@@ -299,6 +320,27 @@ export function toggle(idx) {
     b.dataset.wasRead = '1';
     _syncCurIdx(idx);
     updateReadingStats();
+
+    if (_state.title) {
+      localStorage.setItem('z_progress_' + _state.title, idx);
+    }
+
+    if (_state.pagedMode) {
+      const page = document.querySelector('.book-page');
+      if (page) {
+        page.querySelectorAll('.c-h1, .c-h2, .c-h3').forEach(h => h.classList.remove('active-section'));
+      }
+      
+      let sibling = b.previousElementSibling;
+      while (sibling) {
+        if (sibling.classList.contains('c-h1') || sibling.classList.contains('c-h2') || sibling.classList.contains('c-h3')) {
+          sibling.classList.add('active-section');
+          break;
+        }
+        sibling = sibling.previousElementSibling;
+      }
+    }
+
     setTimeout(() => {
       const r = b.getBoundingClientRect();
       if (r.top < 64 || r.bottom > window.innerHeight - 40) {
@@ -307,6 +349,9 @@ export function toggle(idx) {
     }, 60);
   } else {
     _syncCurIdx(-1);
+    if (_state.title) {
+      localStorage.setItem('z_progress_' + _state.title, -1);
+    }
   }
 }
 
@@ -440,4 +485,89 @@ export async function quizMe(idx, e, apiKey) {
 export function toggleSidebar() {
   const sidebar = document.getElementById('rSidebar');
   if (sidebar) sidebar.classList.toggle('sidebar-open');
+}
+
+export function toggleBionic() {
+  _state.bionicMode = !_state.bionicMode;
+  const btn = document.getElementById('bionicToggleBtn');
+  if (btn) {
+    btn.innerHTML = _state.bionicMode ? 'Regular Text ⚡' : 'Bionic ⚡';
+    btn.classList.toggle('active', _state.bionicMode);
+  }
+  refreshParagraphs();
+}
+
+export function togglePaged() {
+  _state.pagedMode = !_state.pagedMode;
+  const btn = document.getElementById('pagedToggleBtn');
+  if (btn) {
+    btn.innerHTML = _state.pagedMode ? 'Flow Scroll 📜' : 'Paged Book 📖';
+    btn.classList.toggle('active', _state.pagedMode);
+  }
+  const page = document.querySelector('.book-page');
+  if (page) {
+    page.classList.toggle('paged-mode', _state.pagedMode);
+  }
+  
+  if (_state.pagedMode && _state.curIdx === -1 && _state.allBlocks.length > 0) {
+    toggle(0);
+  }
+}
+
+export function refreshParagraphs() {
+  const isBionic = _state.bionicMode;
+  
+  _state.allBlocks.forEach(div => {
+    const idx = parseInt(div.dataset.index);
+    if (isNaN(idx)) return;
+    const block = _state.allBlocksRaw[idx];
+    if (!block) return;
+
+    const paraFullInner = div.querySelector('.para-full-inner');
+    if (!paraFullInner) return;
+
+    let paragraphsHtml = '';
+    const isSkip = block.summary === '__skip__';
+    const textSelector = (pText) => {
+      const formatted = isBionic ? formatBionic(pText) : escHtml(pText);
+      return splitSents(formatted).map(s => `<p>${s}</p>`).join('');
+    };
+
+    if (block.paragraphs && Array.isArray(block.paragraphs)) {
+      paragraphsHtml = block.paragraphs.map(pText => {
+        return `<div class="para-sub-block">${textSelector(pText)}</div>`;
+      }).join('');
+    } else {
+      paragraphsHtml = textSelector(block.text);
+    }
+    
+    const isDemo = !_state.apiKey;
+    let actionsHtml = '';
+    if (!isSkip) {
+      if (isDemo) {
+        actionsHtml = `
+          <div class="para-actions">
+            <button class="r-btn tts-btn" disabled title="Upload your own PDF to use Listen" aria-label="Listen to paragraph (demo disabled)">Listen 🔊</button>
+            <button class="r-btn quiz-btn" disabled title="Upload your own PDF to use Quiz" aria-label="Quiz on paragraph (demo disabled)">Quiz Me 🧠</button>
+          </div>`;
+      } else {
+        actionsHtml = `
+          <div class="para-actions">
+            <button class="r-btn tts-btn" aria-label="Listen to paragraph ${idx + 1}">Listen 🔊</button>
+            <button class="r-btn quiz-btn" aria-label="Quiz on paragraph ${idx + 1}">Quiz Me 🧠</button>
+          </div>
+          <div class="para-quiz-container" id="quiz-${idx}"></div>`;
+      }
+    }
+
+    paraFullInner.innerHTML = `
+      ${paragraphsHtml}
+      ${actionsHtml}
+    `;
+
+    if (!isSkip && !isDemo) {
+      paraFullInner.querySelector('.tts-btn').addEventListener('click', (e) => readAloud(idx, e));
+      paraFullInner.querySelector('.quiz-btn').addEventListener('click', (e) => quizMe(idx, e, _state.apiKey));
+    }
+  });
 }
