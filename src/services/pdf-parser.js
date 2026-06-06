@@ -74,6 +74,18 @@ export async function extractPDF(file) {
         }
       }
       ln.text = text.replace(/\s+/g, ' ').trim();
+
+      // Calculate coordinates and width
+      if (ln.items.length > 0) {
+        ln.minX = ln.items[0].x;
+        const lastItem = ln.items[ln.items.length - 1];
+        ln.maxX = lastItem.x + lastItem.w;
+        ln.width = ln.maxX - ln.minX;
+      } else {
+        ln.minX = 0;
+        ln.maxX = 0;
+        ln.width = 0;
+      }
     }
 
     // ── 4. Determine body font size for this page (most common fs) ──
@@ -107,9 +119,23 @@ export async function extractPDF(file) {
     }
     const pageHeight = pageMaxY - pageMinY;
 
+    // Find max width of body-like lines on this page
+    let pageMaxLineWidth = 0;
+    for (const ln of lines) {
+      if (ln.text && ln.text.length > 20 && Math.abs(ln.maxFs - bodyFs) <= 1) {
+        if (ln.width > pageMaxLineWidth) {
+          pageMaxLineWidth = ln.width;
+        }
+      }
+    }
+    if (pageMaxLineWidth === 0) {
+      pageMaxLineWidth = Math.max(...lines.map(ln => ln.width || 0)) || 300;
+    }
+
     for (const ln of lines) {
       ln.bodyFs    = bodyFs;
       ln.medianGap = medianGap;
+      ln.pageMaxLineWidth = pageMaxLineWidth;
       ln.isHeaderZone = false;
       ln.isFooterZone = false;
 
@@ -238,14 +264,17 @@ export async function extractPDF(file) {
       const endsHyphen     = /-\s*$/.test(prevText);
       const startsCap      = /^[A-Z"']/.test(lineText);
       const vertGap        = prev.page === ln.page ? (prev.y - ln.y) : 999;
-      const bigGap         = vertGap > ln.medianGap * 1.6;
-      const bufWords       = textBuf.split(/\s+/).length;
+      
+      const bigGap         = vertGap > ln.medianGap * 1.25;
+      const isShortLine    = prev.width < prev.pageMaxLineWidth * 0.88;
+      const isIndented     = ln.minX > prev.minX + ln.bodyFs * 1.2;
+      const isPageBreak    = prev.page !== ln.page;
 
       if (endsHyphen) {
         // De-hyphenate
         textBuf = textBuf.replace(/-\s*$/, '');
         startNew = false;
-      } else if (endsSentence && bigGap && startsCap && bufWords >= 15) {
+      } else if (endsSentence && startsCap && (bigGap || isShortLine || isIndented || isPageBreak)) {
         startNew = true;  // clean paragraph break
       } else {
         startNew = false; // keep buffering
@@ -341,16 +370,22 @@ function mergeShortParagraphs(blocks) {
 
     // Find next paragraph (skip page breaks)
     let nj = i + 1;
-    while (nj < blocks.length && blocks[nj].type === 'pagebreak') nj++;
+    const pagebreaks = [];
+    while (nj < blocks.length && blocks[nj].type === 'pagebreak') {
+      pagebreaks.push(blocks[nj]);
+      nj++;
+    }
     const next = nj < blocks.length && blocks[nj].type === 'paragraph' ? blocks[nj] : null;
 
     if (words < 25 && !endsTerminal && next) {
       // Absorb into next paragraph
       next.text = b.text + ' ' + next.text;
       next.page = b.page;
-      // Preserve page breaks between them
-      for (let k = i + 1; k < nj; k++) out.push(blocks[k]);
-      continue; // skip current block, will process merged next
+      // Push the page breaks
+      out.push(...pagebreaks);
+      // Advance i to skip the pagebreaks
+      i = nj - 1;
+      continue;
     }
     out.push(b);
   }
