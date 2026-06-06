@@ -25,37 +25,71 @@ export async function extractPDF(file) {
     const page = await pdf.getPage(pageNum);
     const tc  = await page.getTextContent({ includeMarkedContent: false });
 
-    // ── 1. Group items into visual lines by Y coordinate (±4px) ──
-    const lineMap = new Map(); // yKey → { y, items: [{x, str, w, fs}] }
+    // ── 1. Group items into visual lines with Column-aware Gutter detection ──
+    const gutterX = detectColumnGutter(tc.items);
+    const pageLines = [];
 
-    for (const item of tc.items) {
-      if (!item.str) continue;
-      const y  = item.transform[5];
-      const x  = item.transform[4];
-      const w  = item.width || 0;
-      const fs = Math.round(Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2));
+    if (gutterX) {
+      // Split items into left, right, and spanning
+      const leftItems = [];
+      const rightItems = [];
+      const spanningItems = [];
 
-      // Find matching Y bucket (within 4px)
-      let yKey = null;
-      for (const k of lineMap.keys()) {
-        if (Math.abs(k - y) <= 4) { yKey = k; break; }
-      }
-      if (yKey === null) {
-        yKey = y;
-        lineMap.set(yKey, { y, items: [], maxFs: 0, page: pageNum });
-      }
-      const ln = lineMap.get(yKey);
+      for (const item of tc.items) {
+        if (!item.str) continue;
+        const x = item.transform[4];
+        const fs = Math.round(Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2));
+        const w = item.width || (item.str.length * fs * 0.5);
 
-      // Deduplicate: skip if same text at same X (bold duplicate rendering)
-      const isDup = ln.items.some(it => Math.abs(it.x - x) < 4 && it.str === item.str);
-      if (!isDup) {
-        ln.items.push({ x, str: item.str, w, fs });
-        if (fs > ln.maxFs) ln.maxFs = fs;
+        const isSpanning = x < (gutterX - 15) && (x + w) > (gutterX + 15);
+        if (isSpanning) {
+          spanningItems.push(item);
+        } else if (x + w / 2 < gutterX) {
+          leftItems.push(item);
+        } else {
+          rightItems.push(item);
+        }
       }
+
+      // Group each column's items independently
+      const leftLines = groupItemsIntoLines(leftItems, pageNum);
+      const rightLines = groupItemsIntoLines(rightItems, pageNum);
+      const spanningLines = groupItemsIntoLines(spanningItems, pageNum);
+
+      // Distribute spanning lines into top, bottom or middle based on columns bounds
+      let colMaxY = -Infinity;
+      let colMinY = Infinity;
+      [...leftLines, ...rightLines].forEach(ln => {
+        if (ln.y > colMaxY) colMaxY = ln.y;
+        if (ln.y < colMinY) colMinY = ln.y;
+      });
+
+      const topSpanning = [];
+      const bottomSpanning = [];
+      const middleSpanning = [];
+
+      spanningLines.forEach(ln => {
+        if (ln.y > colMaxY - 10) topSpanning.push(ln);
+        else if (ln.y < colMinY + 10) bottomSpanning.push(ln);
+        else middleSpanning.push(ln);
+      });
+
+      // Sort sub-groups top -> bottom
+      topSpanning.sort((a, b) => b.y - a.y);
+      leftLines.sort((a, b) => b.y - a.y);
+      rightLines.sort((a, b) => b.y - a.y);
+      bottomSpanning.sort((a, b) => b.y - a.y);
+
+      // Order of flow: Top spanning (like chapter headers) -> Left Column -> Right Column -> middle -> footers
+      pageLines.push(...topSpanning, ...leftLines, ...rightLines, ...middleSpanning, ...bottomSpanning);
+    } else {
+      // Single column layout
+      const standardLines = groupItemsIntoLines(tc.items, pageNum);
+      standardLines.sort((a, b) => b.y - a.y);
+      pageLines.push(...standardLines);
     }
 
-    // ── 2. Sort lines top→bottom (PDF Y=0 is bottom, so sort descending) ──
-    const lines = [...lineMap.values()].sort((a, b) => b.y - a.y);
+    const lines = pageLines;
 
     // ── 3. Reconstruct text with proper spaces using X-gap heuristic ──
     for (const ln of lines) {
@@ -418,4 +452,95 @@ function splitLongParagraphs(blocks, maxWords) {
     if (chunk.trim()) out.push({ type: 'paragraph', text: chunk.trim(), page: b.page });
   }
   return out;
+}
+
+/**
+ * Detect column gutter in a PDF page by analyzing item horizontal ranges.
+ * Returns X coordinate of center of gutter if columns exist, otherwise null.
+ */
+function detectColumnGutter(items) {
+  if (items.length < 10) return null;
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  for (const it of items) {
+    const x = it.transform[4];
+    const fs = Math.round(Math.sqrt(it.transform[0] ** 2 + it.transform[1] ** 2));
+    const w = it.width || (it.str.length * fs * 0.5);
+    if (x < minX) minX = x;
+    if (x + w > maxX) maxX = x + w;
+  }
+
+  const width = maxX - minX;
+  if (width < 220) return null;
+
+  const searchMin = minX + width * 0.35;
+  const searchMax = minX + width * 0.65;
+
+  const binsCount = 60;
+  const binWidth = (searchMax - searchMin) / binsCount;
+  const overlaps = Array(binsCount).fill(0);
+
+  for (const it of items) {
+    const x = it.transform[4];
+    const fs = Math.round(Math.sqrt(it.transform[0] ** 2 + it.transform[1] ** 2));
+    const w = it.width || (it.str.length * fs * 0.5);
+    const itemMin = x;
+    const itemMax = x + w;
+
+    for (let j = 0; j < binsCount; j++) {
+      const binMin = searchMin + j * binWidth;
+      const binMax = binMin + binWidth;
+      if (itemMin < binMax && itemMax > binMin) {
+        overlaps[j]++;
+      }
+    }
+  }
+
+  let minOverlaps = Infinity;
+  let bestBinIdx = -1;
+  for (let j = 0; j < binsCount; j++) {
+    if (overlaps[j] < minOverlaps) {
+      minOverlaps = overlaps[j];
+      bestBinIdx = j;
+    }
+  }
+
+  if (bestBinIdx !== -1 && minOverlaps < Math.max(1, items.length * 0.03)) {
+    const gutterX = searchMin + bestBinIdx * binWidth + binWidth / 2;
+    return gutterX;
+  }
+
+  return null;
+}
+
+/**
+ * Group list of items into visual lines by Y coordinate (within 4px)
+ */
+function groupItemsIntoLines(items, pageNum) {
+  const lineMap = new Map();
+  for (const item of items) {
+    if (!item.str) continue;
+    const y  = item.transform[5];
+    const x  = item.transform[4];
+    const w  = item.width || 0;
+    const fs = Math.round(Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2));
+
+    let yKey = null;
+    for (const k of lineMap.keys()) {
+      if (Math.abs(k - y) <= 4) { yKey = k; break; }
+    }
+    if (yKey === null) {
+      yKey = y;
+      lineMap.set(yKey, { y, items: [], maxFs: 0, page: pageNum });
+    }
+    const ln = lineMap.get(yKey);
+
+    const isDup = ln.items.some(it => Math.abs(it.x - x) < 4 && it.str === item.str);
+    if (!isDup) {
+      ln.items.push({ x, str: item.str, w, fs });
+      if (fs > ln.maxFs) ln.maxFs = fs;
+    }
+  }
+  return [...lineMap.values()];
 }

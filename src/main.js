@@ -1,8 +1,10 @@
 import { extractPDF } from './services/pdf-parser.js';
-import { generateParagraphSummaries } from './services/gemini-api.js';
-import { buildReader, cleanupReader, collapseAll, expandAll, chgFs, toggleFont, toggleByIndex, toggleSidebar, allBlocks, curIdx, toggleBionic, togglePaged } from './components/reader-ui.js';
+import { generateParagraphSummaries, generateGlobalOutline } from './services/gemini-api.js';
+import { buildReader, cleanupReader, collapseAll, expandAll, chgFs, toggleFont, toggleByIndex, toggleSidebar, allBlocks, curIdx, toggleBionic, togglePaged, prevPage, nextPage } from './components/reader-ui.js';
 import { showToast } from './utils.js';
 import { cancelSpeech } from './components/speech-reader.js';
+import { toggleConceptMap } from './components/concept-map.js';
+import { saveConcepts } from './services/db.js';
 
 // Setup pdf worker globally
 window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -25,6 +27,9 @@ window.clickMockPara = clickMockPara;
 window.loadDemoDoc = loadDemoDoc;
 window.toggleTheme = toggleTheme;
 window.toggleSidebar = toggleSidebar;
+window.prevPage = prevPage;
+window.nextPage = nextPage;
+window.toggleConceptMap = toggleConceptMap;
 
 document.addEventListener('DOMContentLoaded', () => {
   const savedTheme = localStorage.getItem('theme');
@@ -57,11 +62,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const reader = document.getElementById('reader');
     if (!reader || reader.style.display === 'none') return;
     
-    if (e.key === 'ArrowDown' || e.key === 'j') {
+    if (e.key === 'ArrowDown' || e.key === 'j' || e.key === 'ArrowRight') {
       e.preventDefault();
       if (curIdx + 1 < allBlocks.length) toggleByIndex(curIdx + 1);
     }
-    if (e.key === 'ArrowUp' || e.key === 'k') {
+    if (e.key === 'ArrowUp' || e.key === 'k' || e.key === 'ArrowLeft') {
       e.preventDefault();
       if (curIdx - 1 >= 0) toggleByIndex(curIdx - 1);
     }
@@ -101,7 +106,37 @@ export async function processFile(file) {
     const { blocks, title } = await extractPDF(file);
     setStep(2);
     
-    const summarised = await generateParagraphSummaries(blocks, title, key, (step, progress) => {
+    let globalOutline = null;
+    try {
+      globalOutline = await generateGlobalOutline(blocks, title, key);
+      console.log("Global Outline generated:", globalOutline);
+      if (globalOutline && globalOutline.sections) {
+        const concepts = globalOutline.sections.map(sec => ({
+          heading: sec.heading,
+          concept: sec.concept,
+          keywords: sec.keywords,
+          mastery: 'new'
+        }));
+        await saveConcepts(title, concepts);
+      }
+    } catch (e) {
+      console.error("Failed to generate global outline, proceeding without it:", e);
+    }
+
+    if (!globalOutline) {
+      const defaultConcepts = blocks
+        .filter(b => b.type === 'h2' || b.type === 'h3')
+        .map(h => ({
+          heading: h.text,
+          concept: `Learn about ${h.text}`,
+          keywords: h.text.split(' ').filter(w => w.length > 4).slice(0, 3),
+          mastery: 'new'
+        }));
+      await saveConcepts(title, defaultConcepts);
+    }
+
+    setStep(3);
+    const summarised = await generateParagraphSummaries(blocks, globalOutline, title, key, (step, progress) => {
       setStep(step);
       if (progress) updateBatchProgress(progress);
     });
@@ -164,6 +199,12 @@ export function goHome() {
   const reader = document.getElementById('reader');
   if (reader) reader.classList.remove('loaded');
   
+  // Hide Concept Map button and close modal
+  const cmBtn = document.getElementById('conceptMapToggleBtn');
+  if (cmBtn) cmBtn.style.display = 'none';
+  const cmModal = document.getElementById('conceptMapModal');
+  if (cmModal) cmModal.style.display = 'none';
+  
   cancelSpeech();
 }
 
@@ -213,8 +254,19 @@ const DEMO_BLOCKS = [
   { type: 'paragraph', text: 'To achieve deep learning, you must enter a state of "Flow"—a psychological term coined by Mihaly Csikszentmihalyi. Flow is a state of deep absorption and focus where a person is fully immersed in their current activity. In this state, distractions are naturally filtered out, time seems to warp, and the efficiency of synaptic plasticity increases dramatically because of focused neurotransmitter release.', summary: '✦ Entering a state of flow filters out distractions and increases study efficiency.' },
 ];
 
-export function loadDemoDoc() {
+export async function loadDemoDoc() {
   show('reader');
+  
+  const demoConcepts = [
+    { heading: '1. What Happens in the Brain When You Study?', concept: 'Understand the biological basis of memory formulation and studying.', keywords: ['Synaptic', 'Plasticity', 'Potentiation'], mastery: 'new' },
+    { heading: '2. The Myth of Multitasking', concept: 'Understand multitasking cognitive costs and the state of Flow.', keywords: ['Multitasking', 'Cognitive', 'Flow'], mastery: 'new' }
+  ];
+  try {
+    await saveConcepts('The Biology of Learning: Synaptic Plasticity', demoConcepts);
+  } catch (e) {
+    console.error("Failed to save demo concepts:", e);
+  }
+
   // Pass null as API key for demo mode — disables quiz/TTS API calls
   buildReader(DEMO_BLOCKS, 'The Biology of Learning: Synaptic Plasticity', 'biology_of_learning_demo.pdf', null);
   document.getElementById('reader')?.classList.add('loaded');

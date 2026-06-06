@@ -263,7 +263,10 @@
         </button>
         <button class="r-btn" id="fontToggleBtn" onclick="toggleFont()" aria-label="Change reading font">Serif 📖</button>
         <button class="r-btn" id="pagedToggleBtn" onclick="togglePaged()" aria-label="Toggle paged book view">Paged Book 📖</button>
+        <button class="r-btn" id="prevPageBtn" onclick="prevPage()" aria-label="Previous page" style="display: none;">◀ Prev</button>
+        <button class="r-btn" id="nextPageBtn" onclick="nextPage()" aria-label="Next page" style="display: none;">Next ▶</button>
         <button class="r-btn" id="bionicToggleBtn" onclick="toggleBionic()" aria-label="Toggle bionic reading mode">Bionic ⚡</button>
+        <button class="r-btn" id="conceptMapToggleBtn" onclick="toggleConceptMap()" aria-label="Toggle concept map" style="display: none;">Concept Map 🧠</button>
         <div class="fs-ctrl" role="group" aria-label="Font size">
           <button onclick="chgFs(-1)" aria-label="Decrease font size">A−</button>
           <span id="fsLabel">18</span>
@@ -296,6 +299,20 @@
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <!-- Concept Map Modal Overlay -->
+  <div id="conceptMapModal" class="cm-modal" style="display: none;">
+    <div class="cm-modal-content">
+      <div class="cm-modal-header">
+        <h3>Interactive Concept Map</h3>
+        <button class="cm-close-btn" onclick="toggleConceptMap()">✕</button>
+      </div>
+      <div class="cm-modal-body">
+        <p class="cm-intro">Nodes represent key terms from the document. Pass quizzes to master them! (Green = Mastered, Orange = Learning, Gray = Unattempted)</p>
+        <div id="conceptMapContainer"></div>
+      </div>
+    </div>
+  </div>
 
   <!-- Modular entry point -->
   <script type="module" src="/src/main.js"></script>

@@ -258,3 +258,136 @@ body.dark-mode .quiz-error-box .q-label {
 .r-bar .theme-toggle-btn {
   margin-right: 6px;
 }
+
+/* Concept Map Modal Overlay */
+.cm-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.cm-modal-content {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  width: 90%;
+  max-width: 700px;
+  height: 80vh;
+  max-height: 600px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg);
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(30px); }
+  to { transform: translateY(0); }
+}
+
+.cm-modal-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.cm-modal-header h3 {
+  font-family: 'Playfair Display', serif;
+  font-size: 18px;
+  color: var(--ink);
+  margin: 0;
+}
+.cm-close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--ink3);
+  cursor: pointer;
+  padding: 4px;
+  transition: color 0.2s;
+}
+.cm-close-btn:hover {
+  color: var(--ink);
+}
+
+.cm-modal-body {
+  padding: 20px 24px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cm-intro {
+  font-size: 12.5px;
+  color: var(--ink2);
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+}
+
+#conceptMapContainer {
+  flex: 1;
+  background: var(--paper2);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Concept Node Graph SVG Styles */
+.node-circle {
+  transition: fill 0.3s, stroke-width 0.3s;
+  cursor: pointer;
+}
+.node-circle:hover {
+  stroke-width: 3px;
+  stroke: var(--ink);
+}
+.node-text {
+  font-family: var(--reading-font);
+  font-size: 10px;
+  pointer-events: none;
+  fill: var(--ink);
+  text-anchor: middle;
+}
+.link-line {
+  stroke: var(--rule);
+  stroke-width: 1.5px;
+  stroke-dasharray: 4;
+}
+
+body.dark-mode .cm-modal {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+/* TTS Word-by-word synchronized highlighting */
+.tts-word {
+  transition: background 0.1s ease, color 0.1s ease;
+  border-radius: 3px;
+  padding: 0 1px;
+}
+.tts-active-word {
+  background: var(--gold-soft) !important;
+  color: var(--gold) !important;
+  font-weight: 600;
+  box-shadow: 0 0 4px var(--gold-glow);
+}
+body.dark-mode .tts-active-word {
+  background: rgba(245, 158, 11, 0.25) !important;
+  color: #FBBF24 !important;
+}

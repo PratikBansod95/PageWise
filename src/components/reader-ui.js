@@ -2,6 +2,7 @@ import { slug, splitSents, escHtml, showToast, formatBionic } from '../utils.js'
 import { initSpeech, readAloud, cancelSpeech } from './speech-reader.js';
 import { generateQuizQuestion } from '../services/gemini-api.js';
 import { renderQuiz } from './active-recall.js';
+import { saveProgress, getProgress } from '../services/db.js';
 
 /**
  * Component to handle Reader UI rendering, font adjustments, paragraph toggles,
@@ -245,10 +246,12 @@ export function buildReader(blocks, title, fname, apiKey) {
   window.addEventListener('scroll', _state.scrollHandler, { passive: true });
   updateProg();
 
-  // Auto-resume progress dialog
-  const savedIdx = localStorage.getItem('z_progress_' + title);
-  if (savedIdx !== null && parseInt(savedIdx) !== -1) {
-    const resumeIdx = parseInt(savedIdx);
+  // Show concept map button
+  const cmBtn = document.getElementById('conceptMapToggleBtn');
+  if (cmBtn) cmBtn.style.display = 'inline-block';
+
+  // Auto-resume progress dialog using IndexedDB
+  getProgress(title).then(resumeIdx => {
     if (resumeIdx >= 0 && resumeIdx < _state.allBlocks.length) {
       setTimeout(() => {
         if (confirm(`Resume reading where you left off (paragraph ${resumeIdx + 1})?`)) {
@@ -256,7 +259,7 @@ export function buildReader(blocks, title, fname, apiKey) {
         }
       }, 500);
     }
-  }
+  }).catch(e => console.error("Failed to load progress from IndexedDB:", e));
 }
 
 /** Update the reading stats bar */
@@ -322,7 +325,7 @@ export function toggle(idx) {
     updateReadingStats();
 
     if (_state.title) {
-      localStorage.setItem('z_progress_' + _state.title, idx);
+      saveProgress(_state.title, idx).catch(e => console.error(e));
     }
 
     if (_state.pagedMode) {
@@ -350,7 +353,7 @@ export function toggle(idx) {
   } else {
     _syncCurIdx(-1);
     if (_state.title) {
-      localStorage.setItem('z_progress_' + _state.title, -1);
+      saveProgress(_state.title, -1).catch(e => console.error(e));
     }
   }
 }
@@ -508,9 +511,29 @@ export function togglePaged() {
   if (page) {
     page.classList.toggle('paged-mode', _state.pagedMode);
   }
+
+  const prevBtn = document.getElementById('prevPageBtn');
+  const nextBtn = document.getElementById('nextPageBtn');
+  if (prevBtn && nextBtn) {
+    const displayStyle = _state.pagedMode ? 'inline-block' : 'none';
+    prevBtn.style.display = displayStyle;
+    nextBtn.style.display = displayStyle;
+  }
   
   if (_state.pagedMode && _state.curIdx === -1 && _state.allBlocks.length > 0) {
     toggle(0);
+  }
+}
+
+export function prevPage() {
+  if (_state.pagedMode && _state.curIdx - 1 >= 0) {
+    toggle(_state.curIdx - 1);
+  }
+}
+
+export function nextPage() {
+  if (_state.pagedMode && _state.curIdx + 1 < _state.allBlocks.length) {
+    toggle(_state.curIdx + 1);
   }
 }
 
@@ -571,3 +594,88 @@ export function refreshParagraphs() {
     }
   });
 }
+
+const _ttsOriginalHtmls = new Map();
+
+window.onTTSStart = function(idx, text) {
+  const div = _state.allBlocks[idx];
+  if (!div) return;
+  const inner = div.querySelector('.para-full-inner');
+  if (!inner) return;
+  
+  if (!_ttsOriginalHtmls.has(idx)) {
+    const actions = inner.querySelector('.para-actions');
+    const quiz = inner.querySelector('.para-quiz-container');
+    
+    _ttsOriginalHtmls.set(idx, inner.innerHTML);
+    
+    let resultHtml = '';
+    let lastIndex = 0;
+    const wordRegex = /[a-zA-Z0-9'\u00C0-\u00FF]+/g;
+    
+    while (true) {
+      const match = wordRegex.exec(text);
+      if (!match) break;
+      
+      const word = match[0];
+      const matchIndex = match.index;
+      
+      resultHtml += escHtml(text.substring(lastIndex, matchIndex));
+      resultHtml += `<span class="tts-word" data-start="${matchIndex}">${escHtml(word)}</span>`;
+      lastIndex = wordRegex.lastIndex;
+    }
+    resultHtml += escHtml(text.substring(lastIndex));
+    
+    inner.innerHTML = `<div class="tts-highlight-container">${resultHtml}</div>`;
+    if (actions) inner.appendChild(actions);
+    if (quiz) inner.appendChild(quiz);
+    
+    const isDemo = !_state.apiKey;
+    if (!isDemo) {
+      inner.querySelector('.tts-btn')?.addEventListener('click', (e) => readAloud(idx, e));
+      inner.querySelector('.quiz-btn')?.addEventListener('click', (e) => quizMe(idx, e, _state.apiKey));
+    }
+  }
+};
+
+window.onTTSBoundary = function(idx, charIndex) {
+  const div = _state.allBlocks[idx];
+  if (!div) return;
+  const spans = div.querySelectorAll('.tts-word');
+  
+  let activeSpan = null;
+  let minDiff = Infinity;
+  
+  spans.forEach(span => {
+    const start = parseInt(span.dataset.start);
+    if (start <= charIndex) {
+      const diff = charIndex - start;
+      if (diff < minDiff) {
+        minDiff = diff;
+        activeSpan = span;
+      }
+    }
+  });
+  
+  if (activeSpan) {
+    spans.forEach(s => s.classList.remove('tts-active-word'));
+    activeSpan.classList.add('tts-active-word');
+  }
+};
+
+window.onTTSEnd = function(idx) {
+  const div = _state.allBlocks[idx];
+  if (div && _ttsOriginalHtmls.has(idx)) {
+    const inner = div.querySelector('.para-full-inner');
+    if (inner) {
+      inner.innerHTML = _ttsOriginalHtmls.get(idx);
+      _ttsOriginalHtmls.delete(idx);
+      
+      const isDemo = !_state.apiKey;
+      if (!isDemo) {
+        inner.querySelector('.tts-btn')?.addEventListener('click', (e) => readAloud(idx, e));
+        inner.querySelector('.quiz-btn')?.addEventListener('click', (e) => quizMe(idx, e, _state.apiKey));
+      }
+    }
+  }
+};

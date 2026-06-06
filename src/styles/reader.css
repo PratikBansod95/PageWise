@@ -424,14 +424,49 @@
 
 /* Paged Mode Layout overrides */
 .book-page.paged-mode {
-  min-height: auto;
+  min-height: 400px;
+  position: relative;
 }
-.book-page.paged-mode .para-block:not(.active) {
-  display: none !important;
+.book-page.paged-mode .para-block {
+  opacity: 0;
+  transform: translate3d(25px, 0, 0);
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1), transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
-.book-page.paged-mode .c-h1:not(.active-section),
-.book-page.paged-mode .c-h2:not(.active-section),
-.book-page.paged-mode .c-h3:not(.active-section),
+.book-page.paged-mode .para-block.active {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  position: relative;
+  visibility: visible;
+  pointer-events: auto;
+}
+.book-page.paged-mode .c-h1,
+.book-page.paged-mode .c-h2,
+.book-page.paged-mode .c-h3 {
+  opacity: 0;
+  transform: translate3d(0, -8px, 0);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+.book-page.paged-mode .c-h1.active-section,
+.book-page.paged-mode .c-h2.active-section,
+.book-page.paged-mode .c-h3.active-section {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  position: relative;
+  visibility: visible;
+  pointer-events: auto;
+}
 .book-page.paged-mode .pg-turn {
   display: none !important;
 }

@@ -30,6 +30,8 @@ export function renderQuiz(idx, container, quiz) {
   });
 }
 
+import { getConcepts, saveConcepts } from '../services/db.js';
+
 export function submitAnswer(idx, oidx, container) {
   const correctIdx = parseInt(container.dataset.answer);
   const explanation = container.dataset.explanation;
@@ -58,5 +60,37 @@ export function submitAnswer(idx, oidx, container) {
   } else {
     feedback.className = 'quiz-feedback feedback-visible incorrect';
     feedback.innerHTML = `<strong>Incorrect ❌</strong> ${escHtml(explanation)}`;
+  }
+
+  // Update concept mastery status in IndexedDB
+  const docTitleEl = document.getElementById('rDocName');
+  const docTitle = docTitleEl ? docTitleEl.textContent.trim() : '';
+  
+  const blockEl = container.closest('.para-block');
+  let sectionHeading = '';
+  if (blockEl) {
+    let prev = blockEl.previousElementSibling;
+    while (prev) {
+      if (prev.classList.contains('c-h1') || prev.classList.contains('c-h2') || prev.classList.contains('c-h3')) {
+        sectionHeading = prev.textContent.trim();
+        break;
+      }
+      prev = prev.previousElementSibling;
+    }
+  }
+
+  if (docTitle && sectionHeading) {
+    getConcepts(docTitle).then(concepts => {
+      if (concepts && concepts.length > 0) {
+        const matchingSec = concepts.find(c => c.heading.trim().toLowerCase() === sectionHeading.toLowerCase());
+        if (matchingSec) {
+          // If already mastered, don't demote to learning on a single mistake, or we can just update it
+          matchingSec.mastery = isCorrect ? 'mastered' : 'learning';
+          saveConcepts(docTitle, concepts).then(() => {
+            console.log(`Updated mastery of concept "${sectionHeading}" to: ${matchingSec.mastery}`);
+          });
+        }
+      }
+    }).catch(e => console.error("Failed to update concept mastery:", e));
   }
 }

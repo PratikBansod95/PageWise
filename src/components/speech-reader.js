@@ -48,18 +48,30 @@ export function readAloud(idx, e) {
     if (preferred) utterance.voice = preferred;
   }
   
+  utterance.onboundary = (event) => {
+    if (event.name === 'word' && window.onTTSBoundary) {
+      window.onTTSBoundary(idx, event.charIndex);
+    }
+  };
+
   utterance.onend = () => {
     if (activeSpeechIdx === idx) {
       activeSpeechIdx = -1;
       updateSpeechButtons();
+      if (window.onTTSEnd) window.onTTSEnd(idx);
     }
   };
   utterance.onerror = () => {
     if (activeSpeechIdx === idx) {
       activeSpeechIdx = -1;
       updateSpeechButtons();
+      if (window.onTTSEnd) window.onTTSEnd(idx);
     }
   };
+  
+  if (window.onTTSStart) {
+    window.onTTSStart(idx, text);
+  }
   
   activeSpeechIdx = idx;
   window.speechSynthesis.speak(utterance);
@@ -67,11 +79,15 @@ export function readAloud(idx, e) {
 }
 
 export function cancelSpeech() {
+  const oldIdx = activeSpeechIdx;
   if (window.speechSynthesis) {
     window.speechSynthesis.cancel();
   }
   activeSpeechIdx = -1;
   updateSpeechButtons();
+  if (oldIdx !== -1 && window.onTTSEnd) {
+    window.onTTSEnd(oldIdx);
+  }
 }
 
 export function getActiveSpeechIdx() {

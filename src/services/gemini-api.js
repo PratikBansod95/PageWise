@@ -44,8 +44,137 @@ function guessDocType(title) {
   return 'educational document';
 }
 
+// ── Main exports and Stage 1 generator ──
+
+export async function generateGlobalOutline(blocks, title, key) {
+  // Extract outline: headings and paragraph count under each heading
+  const outline = [];
+  let currentHeader = null;
+  let pCount = 0;
+  
+  for (const b of blocks) {
+    if (b.type === 'h1' || b.type === 'h2' || b.type === 'h3') {
+      if (currentHeader) {
+        outline.push({ heading: currentHeader.text, type: currentHeader.type, paragraphsCount: pCount });
+      }
+      currentHeader = b;
+      pCount = 0;
+    } else if (b.type === 'paragraph') {
+      pCount++;
+    }
+  }
+  if (currentHeader) {
+    outline.push({ heading: currentHeader.text, type: currentHeader.type, paragraphsCount: pCount });
+  }
+
+  if (!outline.length) {
+    return { learningObjective: "General reading document", sections: [] };
+  }
+
+  const prompt = `You are a curriculum expert creating a study roadmap for the document titled "${title}".
+Analyze the document outline below. Identify the main learning objective and 1-3 key terms/concepts for each section.
+Format your response as a JSON object matching this structure:
+{
+  "learningObjective": "Overall objective for the document",
+  "sections": [
+    {
+      "heading": "Heading Name",
+      "concept": "Core theme or main learning objective for this section",
+      "keywords": ["KeyTerm1", "KeyTerm2"]
+    }
+  ]
+}
+
+Ensure the "heading" fields match the outline headings EXACTLY.
+Return ONLY valid JSON, no markdown code blocks or wrapper text.
+
+Outline:
+${outline.map(o => `- [${o.type.toUpperCase()}] ${o.heading} (${o.paragraphsCount} paragraphs)`).join('\n')}`;
+
+  try {
+    const res = await fetchWithRetry(`${GEMINI_URL}?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 2048 }
+      })
+    });
+    
+    const data = await res.json();
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const clean = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
+    
+    // Find the first outer brace and parse
+    const start = clean.indexOf('{');
+    const end = clean.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      return JSON.parse(clean.substring(start, end + 1));
+    }
+    return JSON.parse(clean);
+  } catch (err) {
+    console.error("Global outline generation failed, returning blank layout context:", err);
+    return { learningObjective: "General reading document", sections: [] };
+  }
+}
+
+// ── Plain summary fallback generator ──
+async function getPlainSummaryFallback(batch, title, key) {
+  const prompt = `You are a tutor. For the document "${title}", write a short 1-sentence summary (10-18 words) for each paragraph below.
+Keep the summary clear, active, and focused on the key term.
+Do NOT use markdown. Write exactly one line per paragraph, formatted exactly like:
+Summary 1: [write summary here]
+Summary 2: [write summary here]
+
+Paragraphs:
+${batch.map((p, i) => `Paragraph ${i + 1}: ${p.text}`).join('\n')}`;
+
+  try {
+    const res = await fetchWithRetry(`${GEMINI_URL}?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 1024 }
+      })
+    });
+    const data = await res.json();
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    const lines = raw.split('\n');
+    const parsedGroups = [];
+    batch.forEach((p, i) => {
+      const prefix = `Summary ${i + 1}:`;
+      const line = lines.find(l => l.trim().startsWith(prefix));
+      let sumText = '';
+      if (line) {
+        sumText = line.substring(line.indexOf(prefix) + prefix.length).trim();
+      } else {
+        const matchingLine = lines[i];
+        sumText = matchingLine ? matchingLine.replace(/^Summary \d+:\s*/i, '').trim() : '';
+      }
+      
+      if (sumText && sumText.length > 5) {
+        parsedGroups.push({
+          summary: sumText,
+          paragraphIndices: [i + 1]
+        });
+      } else {
+        parsedGroups.push({
+          summary: firstSentence(p.text),
+          paragraphIndices: [i + 1]
+        });
+      }
+    });
+    return parsedGroups;
+  } catch (err) {
+    console.error("Plain summary fallback failed:", err);
+    return null;
+  }
+}
+
 // ── Main export ──
-export async function generateParagraphSummaries(blocks, title, key, onProgress) {
+export async function generateParagraphSummaries(blocks, globalOutline, title, key, onProgress) {
   if (onProgress) onProgress(3);
 
   const docType = guessDocType(title);
@@ -75,6 +204,14 @@ export async function generateParagraphSummaries(blocks, title, key, onProgress)
 
     if (onProgress) onProgress(3, { current: batchNum, total: totalBatches });
 
+    // Find section context from our global outline
+    const currentSectionInfo = globalOutline?.sections?.find(
+      s => s.heading.toLowerCase() === sectionName.toLowerCase()
+    );
+    const sectionContext = currentSectionInfo 
+      ? `SECTION GOAL: ${currentSectionInfo.concept}\nKEYWORDS TO ANCHOR: ${currentSectionInfo.keywords.join(', ')}`
+      : '';
+
     // Rolling context: last 3 summaries for narrative continuity
     const prevSummaries = allGroups
       .map(g => g.summary)
@@ -84,7 +221,7 @@ export async function generateParagraphSummaries(blocks, title, key, onProgress)
       ? `RECENT SUMMARIES (for flow): ${prevSummaries.join(' → ')}`
       : '';
 
-    const prompt = buildPrompt(title, docType, sectionName, contextLine, batch);
+    const prompt = buildPrompt(title, docType, sectionName, sectionContext, contextLine, batch);
 
     let raw = '';
     try {
@@ -104,7 +241,12 @@ export async function generateParagraphSummaries(blocks, title, key, onProgress)
       raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       console.log(`Batch ${batchNum}/${totalBatches} raw (first 200):`, raw.substring(0, 200));
 
-      const parsed = extractJsonGroups(raw);
+      let parsed = extractJsonGroups(raw);
+
+      if (!parsed) {
+        console.warn(`Batch ${batchNum} JSON parse failed, triggering plain summary fallback...`);
+        parsed = await getPlainSummaryFallback(batch, title, key);
+      }
 
       if (parsed) {
         const groups = reconstructGroups(batch, parsed, blocks);
@@ -115,7 +257,7 @@ export async function generateParagraphSummaries(blocks, title, key, onProgress)
       }
 
     } catch (err) {
-      console.error(`Batch ${batchNum} failed:`, err.message, '\nRaw:', raw.substring(0, 300));
+      console.error(`Batch ${batchNum} failed entirely:`, err.message, '\nRaw:', raw.substring(0, 300));
       // Fallback: each paragraph in this batch gets its own group
       batch.forEach(p => {
         allGroups.push({
@@ -166,11 +308,13 @@ export async function generateParagraphSummaries(blocks, title, key, onProgress)
 }
 
 // ── Prompt builder ──
-function buildPrompt(title, docType, section, contextLine, batch) {
+function buildPrompt(title, docType, section, sectionContext, contextLine, batch) {
   return `You are an expert tutor helping students — including those with ADHD — study "${title}" (${docType}) using a focus-reading interface.
 
 The user sees ONLY a summary line until they click to expand a block of paragraphs.
 Your task is to group the consecutive paragraphs below into logical "focus blocks" (each containing one or more consecutive paragraphs that cover the same core concept or sub-topic) and write a single, high-quality summary for each focus block.
+
+${sectionContext}
 
 Guidelines for summaries:
 - Be a SHORT, CLEAR sentence of 10–18 words that captures the core concept.
