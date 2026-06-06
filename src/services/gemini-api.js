@@ -13,6 +13,13 @@
 const GEMINI_MODEL = 'gemini-2.0-flash';
 const GEMINI_URL   = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
+const safetySettings = [
+  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+];
+
 // ── Retry with exponential backoff ──
 async function fetchWithRetry(url, options, maxRetries = 2) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -97,7 +104,8 @@ ${outline.map(o => `- [${o.type.toUpperCase()}] ${o.heading} (${o.paragraphsCoun
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 2048 }
+        generationConfig: { temperature: 0.2, maxOutputTokens: 2048 },
+        safetySettings
       })
     });
     
@@ -135,7 +143,8 @@ ${batch.map((p, i) => `Paragraph ${i + 1}: ${p.text}`).join('\n')}`;
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 1024 }
+        generationConfig: { temperature: 0.2, maxOutputTokens: 1024 },
+        safetySettings
       })
     });
     const data = await res.json();
@@ -233,7 +242,8 @@ export async function generateParagraphSummaries(blocks, globalOutline, title, k
           generationConfig: {
             temperature:     0.2,
             maxOutputTokens: Math.max(1024, batch.length * 120),
-          }
+          },
+          safetySettings
         })
       });
 
@@ -258,6 +268,9 @@ export async function generateParagraphSummaries(blocks, globalOutline, title, k
 
     } catch (err) {
       console.error(`Batch ${batchNum} failed entirely:`, err.message, '\nRaw:', raw.substring(0, 300));
+      if (window.showToast) {
+        window.showToast(`Batch ${batchNum} failed: ${err.message}`, 'err');
+      }
       // Fallback: each paragraph in this batch gets its own group
       batch.forEach(p => {
         allGroups.push({
@@ -550,7 +563,8 @@ Return ONLY valid JSON, no markdown:
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.5, maxOutputTokens: 512 }
+      generationConfig: { temperature: 0.5, maxOutputTokens: 512 },
+      safetySettings
     })
   });
 
