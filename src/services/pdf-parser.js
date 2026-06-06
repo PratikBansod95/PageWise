@@ -1,238 +1,315 @@
 /**
- * Service to parse PDF structure and extract text, headings, and paragraph blocks.
- * Calibrates line gaps dynamically, merges split paragraphs, and caps block size.
+ * pdf-parser.js — Pagewise
+ *
+ * Complete rewrite based on real NCERT PDF analysis.
+ *
+ * Key findings from PDF structure analysis:
+ * 1. PDF.js text items may lack spaces — must reconstruct from X gaps
+ * 2. Drop-caps ("H" at large font) must be joined to their following line
+ * 3. Paragraph breaks = sentence ends + gap > 1.5× median line gap
+ * 4. Duplicate heading text ("5.2 NUTRITION 5.2 NUTRITION") from bold rendering
+ * 5. Page numbers / running headers = font size ≤9 + short text
+ * 6. Mid-sentence line wraps have NO gap — just next Y position
  */
-
-const MAX_MERGED_WORDS = 500;
 
 export async function extractPDF(file) {
   const pdfjsLib = window.pdfjsLib;
-  if (!pdfjsLib) {
-    throw new Error("pdfjsLib is not loaded. Ensure the PDF.js script tag is in index.html.");
-  }
+  if (!pdfjsLib) throw new Error('pdfjsLib is not loaded.');
 
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-  const blocks = [];
-  let title = '';
 
-  const pushParagraph = (text, page) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    blocks.push({ type: 'paragraph', text: trimmed, page });
-  };
+  const allLines = []; // all lines across all pages
 
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const tc = await page.getTextContent();
-    const lines = [];
-    let cur = null;
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const tc  = await page.getTextContent({ includeMarkedContent: false });
+
+    // ── 1. Group items into visual lines by Y coordinate (±4px) ──
+    const lineMap = new Map(); // yKey → { y, items: [{x, str, w, fs}] }
 
     for (const item of tc.items) {
-      const y = Math.round(item.transform[5]);
-      const x = Math.round(item.transform[4]);
+      if (!item.str) continue;
+      const y  = item.transform[5];
+      const x  = item.transform[4];
+      const w  = item.width || 0;
       const fs = Math.round(Math.sqrt(item.transform[0] ** 2 + item.transform[1] ** 2));
-      if (!cur || Math.abs(cur.y - y) > 3) {
-        if (cur) lines.push(cur);
-        cur = { y, text: '', fontSize: fs, items: [] };
+
+      // Find matching Y bucket (within 4px)
+      let yKey = null;
+      for (const k of lineMap.keys()) {
+        if (Math.abs(k - y) <= 4) { yKey = k; break; }
       }
-      
-      // Filter out overlapping bold duplicates drawn at the same horizontal/vertical coordinate
-      const isDup = cur.items.some(it => Math.abs(it.x - x) < 3 && it.str === item.str);
+      if (yKey === null) {
+        yKey = y;
+        lineMap.set(yKey, { y, items: [], maxFs: 0, page: pageNum });
+      }
+      const ln = lineMap.get(yKey);
+
+      // Deduplicate: skip if same text at same X (bold duplicate rendering)
+      const isDup = ln.items.some(it => Math.abs(it.x - x) < 4 && it.str === item.str);
       if (!isDup) {
-        cur.text += item.str;
-        if (item.hasEOL) cur.text += ' ';
-        cur.items.push({ x, str: item.str });
+        ln.items.push({ x, str: item.str, w, fs });
+        if (fs > ln.maxFs) ln.maxFs = fs;
       }
     }
-    if (cur) lines.push(cur);
 
-    // Calculate average standard line gap for this page
-    const gaps = [];
-    for (let j = 1; j < lines.length; j++) {
-      const g = Math.abs(lines[j].y - lines[j - 1].y);
-      const fs = lines[j].fontSize;
-      if (g > 3 && g < fs * 2.5) gaps.push(g);
-    }
-    const avgGap = gaps.length ? (gaps.reduce((s, x) => s + x, 0) / gaps.length) : 0;
+    // ── 2. Sort lines top→bottom (PDF Y=0 is bottom, so sort descending) ──
+    const lines = [...lineMap.values()].sort((a, b) => b.y - a.y);
 
-    const avg = lines.reduce((s, l) => s + l.fontSize, 0) / (lines.length || 1);
-    let pBuf = [];
-
-    for (let j = 0; j < lines.length; j++) {
-      const ln = lines[j];
-      const t = ln.text.trim();
-      if (!t) continue;
-
-      // Check for paragraph break based on vertical spacing and text content
-      if (j > 0 && pBuf.length) {
-        const prevLn = lines[j - 1];
-        const gap = Math.abs(ln.y - prevLn.y);
-        const prevText = prevLn.text.trim();
-        
-        const endsWithSentenceEnd = /[.!?]['"]?$/.test(prevText);
-        const endsWithHyphen = /-$/.test(prevText);
-        const startsWithLowercase = /^[a-z]/.test(t);
-        
-        let isParaBreak = false;
-        
-        if (endsWithHyphen) {
-          isParaBreak = false;
-        } else if (gap > ln.fontSize * 3.0) {
-          isParaBreak = true;
-        } else if (startsWithLowercase) {
-          isParaBreak = false;
-        } else if (!endsWithSentenceEnd) {
-          isParaBreak = false;
+    // ── 3. Reconstruct text with proper spaces using X-gap heuristic ──
+    for (const ln of lines) {
+      ln.items.sort((a, b) => a.x - b.x);
+      let text = '';
+      for (let i = 0; i < ln.items.length; i++) {
+        const cur = ln.items[i];
+        if (i === 0) {
+          text = cur.str;
         } else {
-          const threshold = avgGap > 0 ? avgGap * 1.35 : ln.fontSize * 1.5;
-          if (gap > threshold) {
-            isParaBreak = true;
-          }
-        }
-        
-        if (isParaBreak) {
-          pushParagraph(pBuf.join(' '), i);
-          pBuf = [];
+          const prev = ln.items[i - 1];
+          const gap  = cur.x - (prev.x + prev.w);
+          // If gap > ~1 space width (roughly 2px), insert a space
+          const spaceWidth = (prev.fs || 10) * 0.28;
+          text += (gap > spaceWidth ? ' ' : '') + cur.str;
         }
       }
+      ln.text = text.replace(/\s+/g, ' ').trim();
+    }
 
-      const big = ln.fontSize > avg * 1.3, huge = ln.fontSize > avg * 1.6;
-      if (huge) {
-        if (pBuf.length) { pushParagraph(pBuf.join(' '), i); pBuf = []; }
-        if (!title) title = t;
-        blocks.push({ type: 'h1', text: t, page: i });
-      } else if (big) {
-        if (pBuf.length) { pushParagraph(pBuf.join(' '), i); pBuf = []; }
-        blocks.push({ type: 'h2', text: t, page: i });
-      } else if (/^\d+\.\d+\.\d+\s+\S/.test(t) && t.length < 80 && !/[.!?]$/.test(t)) {
-        if (pBuf.length) { pushParagraph(pBuf.join(' '), i); pBuf = []; }
-        blocks.push({ type: 'h3', text: t, page: i });
-      } else if (/^\d+\.\d+\s+[A-Z\u0900-\u097F]/.test(t) && t.length < 80 && !/[.!?]$/.test(t)) {
-        if (pBuf.length) { pushParagraph(pBuf.join(' '), i); pBuf = []; }
-        blocks.push({ type: 'h2', text: t, page: i });
-      } else {
-        pBuf.push(t);
+    // ── 4. Determine body font size for this page (most common fs) ──
+    const fsFreq = {};
+    for (const ln of lines) {
+      if (ln.maxFs >= 8 && ln.text.length > 3) {
+        fsFreq[ln.maxFs] = (fsFreq[ln.maxFs] || 0) + 1;
       }
     }
-    if (pBuf.length) pushParagraph(pBuf.join(' '), i);
-    blocks.push({ type: 'pagebreak', page: i });
-  }
+    const bodyFs = lines.length
+      ? parseInt(Object.entries(fsFreq).sort((a, b) => b[1] - a[1])[0]?.[0] || 10)
+      : 10;
 
-  // Post-processing to merge drop-caps and fix paragraph flow
-  const mergedDropCaps = [];
-  for (let j = 0; j < blocks.length; j++) {
-    const b = blocks[j];
-    if ((b.type === 'h1' || b.type === 'h2' || b.type === 'h3') && b.text.trim().length === 1) {
-      let nextParaIdx = j + 1;
-      while (nextParaIdx < blocks.length && blocks[nextParaIdx].type === 'pagebreak') {
-        nextParaIdx++;
-      }
-      if (nextParaIdx < blocks.length && blocks[nextParaIdx].type === 'paragraph') {
-        const nextB = blocks[nextParaIdx];
-        nextB.text = b.text.trim() + nextB.text;
-        continue;
-      }
+    // ── 5. Compute median inter-line gap ──
+    const gaps = [];
+    for (let i = 1; i < lines.length; i++) {
+      const g = lines[i - 1].y - lines[i].y;
+      if (g > 1 && g < 30) gaps.push(g);
     }
-    mergedDropCaps.push(b);
+    gaps.sort((a, b) => a - b);
+    const medianGap = gaps[Math.floor(gaps.length / 2)] || 12;
+
+    for (const ln of lines) {
+      ln.bodyFs    = bodyFs;
+      ln.medianGap = medianGap;
+    }
+
+    allLines.push(...lines);
+    allLines.push({ type: 'pagebreak', page: pageNum }); // sentinel
   }
 
-  // Merge consecutive paragraphs that were split across pages or lines
-  const postProcessed = [];
-  for (let j = 0; j < mergedDropCaps.length; j++) {
-    const current = mergedDropCaps[j];
-    if (current.type !== 'paragraph') {
-      postProcessed.push(current);
+  // ── 6. Classify each line ──
+  const classified = [];
+  for (const ln of allLines) {
+    if (ln.type === 'pagebreak') { classified.push(ln); continue; }
+
+    const text = ln.text;
+    if (!text) continue;
+
+    // Skip tiny footers/page numbers
+    if (ln.maxFs <= 9 && text.split(' ').length <= 5) continue;
+    if (/^\d{1,3}$/.test(text)) continue;
+    if (/^(Science|Life Processes|Physics|Chemistry|Biology|Reprint \d{4}[-–]\d{2,4})$/i.test(text)) continue;
+    if (/^Q\s*U\s*E\s*S\s*T\s*I\s*O\s*N\s*S$/i.test(text)) continue; // spaced-out "QUESTIONS"
+
+    // Deduplicate repeated heading text: "5.2 NUTRITION 5.2 NUTRITION 5.2 NUTRITION"
+    const cleanText = dedupeRepeatedText(text);
+
+    // Classify by font size ratio
+    const ratio = ln.maxFs / ln.bodyFs;
+    let type = 'body';
+    if (ratio >= 1.55)      type = 'h1';
+    else if (ratio >= 1.2)  type = 'h2';
+    else if (ratio >= 1.08) type = 'h3';
+
+    // Override by content pattern
+    if (/^\d+\.\d+\.\d+\s+\S/.test(cleanText) && cleanText.length < 90) type = 'h3';
+    else if (/^\d+\.\d+\s+[A-Z\u0900-\u097F]/.test(cleanText) && cleanText.length < 90) type = 'h2';
+
+    // Drop-cap: single large character — mark for merging with next line
+    const isDropCap = type !== 'body' && cleanText.length === 1;
+
+    classified.push({ ...ln, text: cleanText, type, isDropCap });
+  }
+
+  // ── 7. Stitch lines into paragraph blocks ──
+  const blocks  = [];
+  let   textBuf = '';
+  let   bufPage = 1;
+  let   prev    = null; // previous non-pagebreak classified line
+  let   dropCapPending = '';
+
+  const flush = (page) => {
+    const t = textBuf.trim();
+    textBuf = '';
+    if (!t || t.split(/\s+/).length < 6) return;
+    blocks.push({ type: 'paragraph', text: t, page });
+  };
+
+  for (const ln of classified) {
+    if (ln.type === 'pagebreak') {
+      // Don't flush on page break — paragraph may continue on next page
+      blocks.push(ln);
       continue;
     }
 
-    let mergedText = current.text.trim();
-    let lastMergedPage = current.page;
-    let nextIdx = j + 1;
-    let pendingPagebreaks = [];
+    // Handle drop-cap: store and prepend to next body line
+    if (ln.isDropCap) {
+      dropCapPending = ln.text;
+      continue;
+    }
 
-    while (nextIdx < mergedDropCaps.length) {
-      const nextBlock = mergedDropCaps[nextIdx];
-      if (nextBlock.type === 'pagebreak') {
-        pendingPagebreaks.push(nextBlock);
-        nextIdx++;
-        continue;
+    if (ln.type !== 'body') {
+      flush(prev?.page || ln.page);
+      blocks.push({ type: ln.type, text: ln.text, page: ln.page });
+      prev = ln;
+      dropCapPending = '';
+      continue;
+    }
+
+    // Prepend any pending drop-cap letter
+    let lineText = ln.text;
+    if (dropCapPending) {
+      lineText = dropCapPending + lineText;
+      dropCapPending = '';
+    }
+
+    // Decide: continue current paragraph or start a new one?
+    let startNew = false;
+    if (prev && prev.type === 'body') {
+      const prevText       = prev.text;
+      const endsSentence   = /[.!?]['"]?\s*$/.test(prevText);
+      const endsHyphen     = /-\s*$/.test(prevText);
+      const startsLower    = /^[a-z(]/.test(lineText);
+      const startsCap      = /^[A-Z"']/.test(lineText);
+      const vertGap        = prev.page === ln.page ? (prev.y - ln.y) : 999;
+      const bigGap         = vertGap > ln.medianGap * 1.6;
+      const bufWords       = textBuf.split(/\s+/).length;
+
+      if (endsHyphen) {
+        // De-hyphenate
+        textBuf = textBuf.replace(/-\s*$/, '');
+        startNew = false;
+      } else if (startsLower) {
+        startNew = false; // definitely continuation
+      } else if (!endsSentence) {
+        startNew = false; // mid-sentence wrap
+      } else if (endsSentence && bigGap && startsCap && bufWords >= 20) {
+        startNew = true;  // clean paragraph break
+      } else if (endsSentence && bufWords >= 80) {
+        startNew = true;  // paragraph is already long enough
       }
-      if (nextBlock.type === 'paragraph') {
-        const nextText = nextBlock.text.trim();
-        const endsWithSentencePunc = /[.!?]['"]?$/.test(mergedText);
-        const startsWithLowercase = /^[a-z]/.test(nextText);
-        const endsWithHyphen = /-$/.test(mergedText);
-        const currentWordCount = mergedText.split(/\s+/).length;
+      // All other cases: keep buffering
+    }
 
-        // Don't merge if we'd exceed the safety cap
-        if (currentWordCount >= MAX_MERGED_WORDS) break;
+    if (startNew) {
+      flush(prev?.page || ln.page);
+      bufPage = ln.page;
+    }
 
-        let shouldMerge = false;
-        if (endsWithHyphen) {
-          shouldMerge = true;
-        } else if (!endsWithSentencePunc) {
-          shouldMerge = true;
-        } else if (startsWithLowercase) {
-          shouldMerge = true;
-        } else if (currentWordCount < 60) {
-          shouldMerge = true;
-        }
+    textBuf = textBuf ? textBuf + ' ' + lineText : lineText;
+    prev = { ...ln, text: lineText }; // use joined text for next iteration's logic
+  }
+  flush(prev?.page || 1);
 
-        if (shouldMerge) {
-          if (endsWithHyphen) {
-            mergedText = mergedText.slice(0, -1) + nextText;
-          } else {
-            mergedText = mergedText + ' ' + nextText;
-          }
-          lastMergedPage = nextBlock.page;
-          nextIdx++;
-        } else {
-          break;
-        }
+  // ── 8. Post-process: merge short orphans, split giants ──
+  const merged = mergeShortParagraphs(blocks);
+  const final  = splitLongParagraphs(merged, 220);
+
+  // ── 9. Validate ──
+  const paraCount = final.filter(b => b.type === 'paragraph').length;
+  if (paraCount === 0) {
+    throw new Error('No readable text found. This PDF may be scanned or image-based.');
+  }
+
+  const h1 = final.find(b => b.type === 'h1');
+  const title = h1 ? h1.text : 'Document';
+  console.log(`✓ PDF parsed: ${paraCount} paragraphs, ${final.filter(b=>b.type==='h2').length} sections`);
+  return { blocks: final, title };
+}
+
+// ── Helpers ──────────────────────────────────────────────
+
+/**
+ * "5.2 NUTRITION 5.2 NUTRITION 5.2 NUTRITION" → "5.2 NUTRITION"
+ * Works by finding the shortest repeating unit.
+ */
+function dedupeRepeatedText(text) {
+  const words = text.trim().split(/\s+/);
+  if (words.length <= 4) return text;
+
+  // Try chunk sizes from 1 to half the word count
+  for (let chunkSize = 1; chunkSize <= Math.floor(words.length / 2); chunkSize++) {
+    const chunk = words.slice(0, chunkSize).join(' ');
+    const rest  = words.slice(chunkSize).join(' ');
+    // Check if rest is just repetitions of chunk
+    const pattern = new RegExp('^(' + chunk.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*)+$', 'i');
+    if (pattern.test(rest)) return chunk;
+  }
+  return text;
+}
+
+/**
+ * Merge very short paragraphs (<25 words, no terminal punctuation) into next paragraph.
+ */
+function mergeShortParagraphs(blocks) {
+  const out = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    if (b.type !== 'paragraph') { out.push(b); continue; }
+
+    const words         = b.text.split(/\s+/).length;
+    const endsTerminal  = /[.!?]['"]?\s*$/.test(b.text);
+
+    // Find next paragraph (skip page breaks)
+    let nj = i + 1;
+    while (nj < blocks.length && blocks[nj].type === 'pagebreak') nj++;
+    const next = nj < blocks.length && blocks[nj].type === 'paragraph' ? blocks[nj] : null;
+
+    if (words < 25 && !endsTerminal && next) {
+      // Absorb into next paragraph
+      next.text = b.text + ' ' + next.text;
+      next.page = b.page;
+      // Preserve page breaks between them
+      for (let k = i + 1; k < nj; k++) out.push(blocks[k]);
+      continue; // skip current block, will process merged next
+    }
+    out.push(b);
+  }
+  return out;
+}
+
+/**
+ * Split paragraphs longer than maxWords at sentence boundaries.
+ */
+function splitLongParagraphs(blocks, maxWords) {
+  const out = [];
+  for (const b of blocks) {
+    if (b.type !== 'paragraph') { out.push(b); continue; }
+
+    const words = b.text.split(/\s+/).length;
+    if (words <= maxWords) { out.push(b); continue; }
+
+    // Split at sentence-final punctuation
+    const sentences = b.text.split(/(?<=[.!?]['"]?)\s+/);
+    let chunk = '';
+    for (const sent of sentences) {
+      const combined = chunk ? chunk + ' ' + sent : sent;
+      if (chunk && combined.split(/\s+/).length > maxWords) {
+        out.push({ type: 'paragraph', text: chunk.trim(), page: b.page });
+        chunk = sent;
       } else {
-        break;
+        chunk = combined;
       }
     }
-
-    postProcessed.push({
-      type: 'paragraph',
-      text: mergedText,
-      page: lastMergedPage
-    });
-
-    for (const pb of pendingPagebreaks) {
-      postProcessed.push(pb);
-    }
-
-    j = nextIdx - 1;
+    if (chunk.trim()) out.push({ type: 'paragraph', text: chunk.trim(), page: b.page });
   }
-
-  const filtered = postProcessed.filter(b => {
-    if (b.type !== 'paragraph') return true;
-    const text = b.text.trim();
-    
-    // Raise minimum paragraph length from 5 to 8 words
-    if (text.split(/\s+/).length < 8) return false;
-    
-    // Filter out page numbers (pure digits)
-    if (/^\d+$/.test(text)) return false;
-    
-    // Filter out NCERT rationalize/reprint footers
-    if (/rationalised/i.test(text) && /\d{4}-\d{2,4}/.test(text)) return false;
-    if (/reprint/i.test(text) && /\d{4}-\d{2,4}/.test(text)) return false;
-    
-    // Filter out short figure and activity headers (e.g., "Figure 5.3", "Activity 5.1") under 15 words
-    if (/^(figure|fig\.|activity)\s+\d+\.\d+/i.test(text) && text.split(/\s+/).length < 15) return false;
-    
-    return true;
-  });
-
-  // Check if we extracted any usable content
-  const hasContent = filtered.some(b => b.type === 'paragraph' || b.type === 'h1' || b.type === 'h2');
-  if (!hasContent) {
-    throw new Error('No readable text found. This PDF may be scanned images, password-protected, or empty.');
-  }
-
-  return { blocks: filtered, title: title || 'Document' };
+  return out;
 }
